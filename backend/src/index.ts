@@ -739,8 +739,12 @@ async function seedAdmin() {
   }
 }
 
-seedAdmin().then(() => {
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+export default app;
+
+if (process.env.NODE_ENV !== 'production') {
+  seedAdmin().then(() => {
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
   });
-});
+}
