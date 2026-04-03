@@ -1,0 +1,299 @@
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useAppStore } from '@/store';
+import { useCurrency } from '@/contexts/SettingsContext';
+import { Search, Plus, Minus, Trash2, ShoppingCart, CheckCircle2 } from 'lucide-react';
+
+interface Product {
+  id: number;
+  name: string;
+  unit: string;
+  costPrice: number;
+  sellPrice: number;
+  stockQuantity: number;
+}
+
+interface CartItem extends Product {
+  quantity: number;
+  customUnitPrice: number;
+}
+
+export default function DirectSale() {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [search, setSearch] = useState('');
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [customerName, setCustomerName] = useState('');
+  const [discount, setDiscount] = useState<number>(0);
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  const { token } = useAppStore();
+  const currency = useCurrency();
+
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  const fetchProducts = async () => {
+    try {
+      const res = await fetch('/api/admin/inventory', { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      setProducts(data);
+    } catch (err) {
+      console.error('Failed to fetch products', err);
+    }
+  };
+
+  const filteredProducts = products.filter(p => 
+    p.name.includes(search) || p.id.toString().includes(search)
+  );
+
+  const addToCart = (product: Product) => {
+    setCart(prev => {
+      const existing = prev.find(item => item.id === product.id);
+      if (existing) {
+        if (existing.quantity >= product.stockQuantity) return prev;
+        return prev.map(item => 
+          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+        );
+      }
+      return [...prev, { ...product, quantity: 1, customUnitPrice: product.sellPrice }];
+    });
+  };
+
+  const updateQuantity = (id: number, delta: number) => {
+    setCart(prev => prev.map(item => {
+      if (item.id === id) {
+        const newQty = Math.max(1, Math.min(item.quantity + delta, item.stockQuantity));
+        return { ...item, quantity: newQty };
+      }
+      return item;
+    }));
+  };
+
+  const updatePrice = (id: number, price: number) => {
+    setCart(prev => prev.map(item => {
+      if (item.id === id) {
+        return { ...item, customUnitPrice: price >= 0 ? price : 0 };
+      }
+      return item;
+    }));
+  };
+
+  const removeFromCart = (id: number) => {
+    setCart(prev => prev.filter(item => item.id !== id));
+  };
+
+  const subtotal = cart.reduce((acc, item) => acc + (item.quantity * item.customUnitPrice), 0);
+  const total = Math.max(0, subtotal - (discount || 0));
+
+  const handleCheckout = async () => {
+    if (cart.length === 0) return;
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/direct-sale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          customerName: customerName.trim() || undefined,
+          discount: discount || 0,
+          items: cart.map(item => ({
+            productId: item.id,
+            quantity: item.quantity,
+            unitPrice: item.customUnitPrice
+          }))
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'حدث خطأ أثناء تأكيد الطلب');
+      
+      setSuccess(true);
+      setCart([]);
+      setCustomerName('');
+      setDiscount(0);
+      fetchProducts(); // Refresh stock
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err: any) {
+      alert(err.message || 'حدث خطأ أثناء تأكيد الطلب');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-slate-800">نقطة البيع (البيع المباشر)</h1>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Products List */}
+        <Card className="lg:col-span-2 flex flex-col h-[calc(100vh-12rem)]">
+          <CardHeader className="pb-3 shrink-0">
+            <div className="relative">
+              <Search className="absolute right-3 top-2.5 h-4 w-4 text-slate-400" />
+              <Input
+                placeholder="ابحث عن منتج..."
+                className="pl-3 pr-9"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+          </CardHeader>
+          <CardContent className="flex-1 overflow-y-auto">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              {filteredProducts.map(product => (
+                <div 
+                  key={product.id} 
+                  className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                    product.stockQuantity > 0 
+                      ? 'hover:border-primary hover:bg-primary/5 bg-white' 
+                      : 'opacity-50 bg-slate-50 cursor-not-allowed'
+                  }`}
+                  onClick={() => product.stockQuantity > 0 && addToCart(product)}
+                >
+                  <p className="font-medium text-sm truncate">{product.name}</p>
+                  <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+                    <span>{product.sellPrice.toFixed(2)} {currency}</span>
+                    <span className={product.stockQuantity < 10 ? 'text-red-500 font-bold' : ''}>
+                      متوفر {product.stockQuantity}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              {filteredProducts.length === 0 && (
+                <div className="col-span-full py-12 text-center text-slate-500">
+                  لا توجد منتجات مطابقة
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Cart */}
+        <Card className="flex flex-col h-[calc(100vh-12rem)] shadow-md border-primary/20">
+          <CardHeader className="bg-primary/5 pb-4 shrink-0">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <ShoppingCart className="h-5 w-5 text-primary" />
+              سلة المشتريات
+            </CardTitle>
+          </CardHeader>
+          
+          <CardContent className="flex-1 overflow-y-auto p-0">
+            {success ? (
+              <div className="h-full flex flex-col items-center justify-center p-6 text-center space-y-4">
+                <CheckCircle2 className="h-16 w-16 text-green-500" />
+                <h3 className="text-xl font-bold text-green-600">تمت عملية البيع بنجاح</h3>
+                <p className="text-sm text-slate-500">تم تسجيل الدفعة وخصم المخزون تلقائياً</p>
+                <Button onClick={() => setSuccess(false)} variant="outline" className="mt-4">
+                  بيع جديد
+                </Button>
+              </div>
+            ) : cart.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-4">
+                <ShoppingCart className="h-12 w-12 opacity-20" />
+                <p>السلة فارغة</p>
+              </div>
+            ) : (
+              <div className="divide-y">
+                {cart.map(item => (
+                  <div key={item.id} className="p-4 flex flex-col gap-3">
+                    <div className="flex justify-between items-start">
+                      <span className="font-semibold text-sm">{item.name}</span>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500 hover:bg-red-50 shrink-0" onClick={() => removeFromCart(item.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    
+                    <div className="flex items-center gap-4">
+                      {/* Custom Price Input */}
+                      <div className="flex bg-white items-center gap-2 flex-1">
+                        <Label className="text-xs text-slate-500 shrink-0">السعر:</Label>
+                        <Input 
+                          type="number" 
+                          className="h-8 text-xs text-left" 
+                          dir="ltr"
+                          value={item.customUnitPrice || ''} 
+                          onChange={(e) => updatePrice(item.id, parseFloat(e.target.value) || 0)}
+                        />
+                      </div>
+
+                      {/* Quantity Controls */}
+                      <div className="flex items-center gap-2 bg-slate-100 rounded-md shrink-0">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-600" onClick={() => updateQuantity(item.id, 1)}>
+                          <Plus className="h-3 w-3" />
+                        </Button>
+                        <span className="w-8 text-center text-sm font-medium">{item.quantity}</span>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-600" onClick={() => updateQuantity(item.id, -1)}>
+                          <Minus className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="text-left text-sm font-bold text-primary">
+                      {((item.quantity * item.customUnitPrice) || 0).toFixed(2)} {currency}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+          
+          {!success && cart.length > 0 && (
+            <div className="p-4 bg-slate-50 border-t shrink-0 space-y-4">
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs text-slate-500 mb-1 block">اسم الزبون (اختياري)</Label>
+                  <Input 
+                    placeholder="مبيعات نقدية..." 
+                    className="h-8 text-sm"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-slate-500 mb-1 block">خصم إضافي إجمالي ({currency})</Label>
+                  <Input 
+                    type="number" 
+                    placeholder="0" 
+                    className="h-8 text-sm text-left"
+                    dir="ltr"
+                    value={discount || ''}
+                    onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 border-t">
+                <div className="flex justify-between items-center text-sm text-slate-600 mb-1">
+                  <span>المجموع الفرعي</span>
+                  <span>{subtotal.toFixed(2)} {currency}</span>
+                </div>
+                {discount > 0 && (
+                  <div className="flex justify-between items-center text-sm text-red-500 mb-2">
+                    <span>الخصم</span>
+                    <span>- {discount.toFixed(2)} {currency}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center font-bold text-lg text-slate-900 mt-2">
+                  <span>الإجمالي المطلوب</span>
+                  <span className="text-primary">{total.toFixed(2)} {currency}</span>
+                </div>
+              </div>
+
+              <Button 
+                className="w-full h-12 text-lg font-bold" 
+                onClick={handleCheckout}
+                disabled={loading}
+              >
+                {loading ? 'جاري التأكيد...' : 'تأكيد الدفع والاستلام'}
+              </Button>
+            </div>
+          )}
+        </Card>
+      </div>
+    </div>
+  );
+}
