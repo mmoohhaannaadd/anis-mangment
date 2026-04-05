@@ -26,11 +26,7 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
   const [settings, setSettings] = useState<Settings>(defaultSettings);
 
   const fetchSettings = () => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-    fetch('/api/admin/settings', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    fetch('/api/admin/settings')
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data) setSettings(data);

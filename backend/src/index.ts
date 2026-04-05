@@ -634,7 +634,7 @@ app.get('/api/admin/analytics', authenticate, requireAdmin, asyncHandler(async (
 }));
 
 // --- ADMIN ROUTES: SETTINGS ---
-app.get('/api/admin/settings', authenticate, requireAdmin, asyncHandler(async (req, res) => {
+app.get('/api/admin/settings', asyncHandler(async (req, res) => {
   const allSettings = await db.select().from(settings);
   const settingsObj: Record<string, string> = {};
   allSettings.forEach(s => { settingsObj[s.key] = s.value; });
