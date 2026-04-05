@@ -119,7 +119,7 @@ export default function Inventory() {
     p.name.includes(search) || p.unit.includes(search)
   );
 
-  const unitLabels: Record<string, string> = { piece: 'قطعة', kg: 'كغ', box: 'صندوق' };
+  const unitLabels: Record<string, string> = { piece: 'قطعة', kg: 'كغ', box: 'كرتونة' };
 
   // Helper: preview pieces to be added
   const restockPiecesPreview = () => {
@@ -324,7 +324,7 @@ export default function Inventory() {
                     <select className="w-full border rounded-md px-3 py-2 text-sm" value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })}>
                       <option value="piece">قطعة</option>
                       <option value="kg">كغ</option>
-                      <option value="box">صندوق</option>
+                      <option value="box">كرتونة</option>
                     </select>
                   </div>
                   <div className="space-y-2">
@@ -426,7 +426,7 @@ export default function Inventory() {
                   <select className="w-full border rounded-md px-3 py-2 text-sm" value={editForm.unit} onChange={e => setEditForm({ ...editForm, unit: e.target.value })}>
                     <option value="piece">قطعة</option>
                     <option value="kg">كغ</option>
-                    <option value="box">صندوق</option>
+                    <option value="box">كرتونة</option>
                   </select>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
