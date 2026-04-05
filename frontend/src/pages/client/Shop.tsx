@@ -3,7 +3,8 @@ import { useAppStore } from '@/store';
 import { useCartStore, type Product } from '@/store/cartStore';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ShoppingCart, Package } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { ShoppingCart, Package, Search } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function Shop() {
@@ -11,6 +12,7 @@ export default function Shop() {
   const { addToCart, items } = useCartStore();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     fetch('/api/client/products', { headers: { Authorization: `Bearer ${token}` } })
@@ -23,25 +25,39 @@ export default function Shop() {
     addToCart(product, 1);
   };
 
+  const filteredProducts = products.filter(p =>
+    p.name.includes(search)
+  );
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-xl border shadow-sm">
         <h2 className="text-2xl font-bold tracking-tight text-primary flex items-center gap-2">
           <ShoppingCart className="h-6 w-6" />
           المتجر
         </h2>
+        
+        <div className="relative w-full sm:w-64">
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <Input
+            placeholder="البحث عن منتج..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pr-9 w-full"
+          />
+        </div>
       </div>
 
       {loading ? (
         <div className="text-center p-12 text-slate-500">جاري التحميل...</div>
-      ) : products.length === 0 ? (
+      ) : filteredProducts.length === 0 ? (
         <Card className="text-center p-12 border-dashed">
           <Package className="h-12 w-12 mx-auto text-slate-300 mb-4" />
-          <h3 className="text-lg font-medium text-slate-900">لا توجد منتجات حالياً</h3>
+          <h3 className="text-lg font-medium text-slate-900">{search ? 'لا توجد نتائج بحث' : 'لا توجد منتجات حالياً'}</h3>
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {products.map((p, i) => {
+          {filteredProducts.map((p, i) => {
             const inCart = items.find(item => item.product.id === p.id);
 
             return (
