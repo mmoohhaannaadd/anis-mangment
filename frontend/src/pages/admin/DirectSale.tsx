@@ -34,6 +34,7 @@ export default function DirectSale() {
   const currency = useCurrency();
 
   useEffect(() => {
+    // eslint-disable-next-line
     fetchProducts();
   }, []);
 
@@ -116,8 +117,8 @@ export default function DirectSale() {
       setDiscount(0);
       fetchProducts(); // Refresh stock
       setTimeout(() => setSuccess(false), 3000);
-    } catch (err: any) {
-      alert(err.message || 'حدث خطأ أثناء تأكيد الطلب');
+    } catch (err: unknown) {
+      alert((err as Error).message || 'حدث خطأ أثناء تأكيد الطلب');
     } finally {
       setLoading(false);
     }

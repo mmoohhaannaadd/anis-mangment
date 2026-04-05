@@ -26,8 +26,8 @@ export default function Login() {
       if (!res.ok) throw new Error('بيانات الدخول غير صحيحة');
       const data = await res.json();
       setAuth(data.token, data.user);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
     } finally {
       setLoading(false);
     }

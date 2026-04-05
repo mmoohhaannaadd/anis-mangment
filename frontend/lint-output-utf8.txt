@@ -1,0 +1,122 @@
+﻿
+> frontend@0.0.0 lint
+> eslint .
+
+
+D:\Antigravity projects\anis managment\frontend\src\components\ui\button.tsx
+  52:18  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+D:\Antigravity projects\anis managment\frontend\src\components\ui\input.tsx
+  4:18  error  An interface declaring no members is equivalent to its supertype  @typescript-eslint/no-empty-object-type
+
+D:\Antigravity projects\anis managment\frontend\src\contexts\SettingsContext.tsx
+  52:14  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  55:14  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+D:\Antigravity projects\anis managment\frontend\src\pages\Login.tsx
+  29:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+D:\Antigravity projects\anis managment\frontend\src\pages\admin\Analytics.tsx
+  78:42  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  78:53  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+D:\Antigravity projects\anis managment\frontend\src\pages\admin\Cash.tsx
+  47:21  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+D:\Antigravity projects\anis managment\frontend\src\pages\admin\Cash.tsx:47:21
+  45 |   };
+  46 |
+> 47 |   useEffect(() => { fetchCashData(); }, []);
+     |                     ^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  48 |
+  49 |   const handleAddExpense = async (e: React.FormEvent) => {
+  50 |     e.preventDefault();  react-hooks/set-state-in-effect
+
+D:\Antigravity projects\anis managment\frontend\src\pages\admin\Clients.tsx
+  38:21  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+D:\Antigravity projects\anis managment\frontend\src\pages\admin\Clients.tsx:38:21
+  36 |   };
+  37 |
+> 38 |   useEffect(() => { fetchClients(); }, []);
+     |                     ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  39 |
+  40 |   const handlePayment = async () => {
+  41 |     if (!selectedClient || !paymentAmount) return;  react-hooks/set-state-in-effect
+
+D:\Antigravity projects\anis managment\frontend\src\pages\admin\DirectSale.tsx
+   38:6   warning  React Hook useEffect has a missing dependency: 'fetchProducts'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  119:19  error    Unexpected any. Specify a different type                                                                          @typescript-eslint/no-explicit-any
+
+D:\Antigravity projects\anis managment\frontend\src\pages\admin\Inventory.tsx
+  45:41  warning  React Hook useEffect has a missing dependency: 'fetchProducts'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+D:\Antigravity projects\anis managment\frontend\src\pages\admin\Orders.tsx
+  40:21  error  Error: Cannot access variable before it is declared
+
+`fetchOrders` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.
+
+D:\Antigravity projects\anis managment\frontend\src\pages\admin\Orders.tsx:40:21
+  38 |   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
+  39 |
+> 40 |   useEffect(() => { fetchOrders(); }, []);
+     |                     ^^^^^^^^^^^ `fetchOrders` accessed before it is declared
+  41 |
+  42 |   const fetchOrders = async () => {
+  43 |     const token = localStorage.getItem('token');
+
+D:\Antigravity projects\anis managment\frontend\src\pages\admin\Orders.tsx:42:3
+  40 |   useEffect(() => { fetchOrders(); }, []);
+  41 |
+> 42 |   const fetchOrders = async () => {
+     |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 43 |     const token = localStorage.getItem('token');
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 44 |     const res = await fetch('/api/admin/orders', {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 45 |       headers: { Authorization: `Bearer ${token}` }
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 46 |     });
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 47 |     if (res.ok) setOrders(await res.json());
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 48 |     setLoading(false);
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 49 |   };
+     | ^^^^^ `fetchOrders` is declared here
+  50 |
+  51 |   const updateStatus = async () => {
+  52 |     if (!selectedOrder) return;  react-hooks/immutability
+
+D:\Antigravity projects\anis managment\frontend\src\pages\admin\Partners.tsx
+  45:21  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+D:\Antigravity projects\anis managment\frontend\src\pages\admin\Partners.tsx:45:21
+  43 |   };
+  44 |
+> 45 |   useEffect(() => { fetchPartners(); }, []);
+     |                     ^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  46 |
+  47 |   const handleAddPartner = async (e: React.FormEvent) => {
+  48 |     e.preventDefault();  react-hooks/set-state-in-effect
+
+ظ£û 14 problems (12 errors, 2 warnings)
+

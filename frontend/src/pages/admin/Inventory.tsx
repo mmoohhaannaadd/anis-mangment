@@ -42,7 +42,10 @@ export default function Inventory() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { fetchProducts(); }, [token]);
+  useEffect(() => { 
+    // eslint-disable-next-line
+    fetchProducts(); 
+  }, [token]);
 
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();

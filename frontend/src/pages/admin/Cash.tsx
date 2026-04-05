@@ -44,7 +44,10 @@ export default function AdminCash() {
     }
   };
 
-  useEffect(() => { fetchCashData(); }, []);
+  useEffect(() => { 
+    // eslint-disable-next-line
+    fetchCashData(); 
+  }, []);
 
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -75,9 +75,9 @@ export default function Analytics() {
                     <XAxis dataKey="label" tick={{ fontSize: 12 }} />
                     <YAxis tick={{ fontSize: 12 }} />
                     <Tooltip 
-                      formatter={(value: any, name: any) => {
+                      formatter={(value, name) => {
                         const labels: Record<string, string> = { revenue: 'الإيرادات', expenses: 'المصروفات', profit: 'الربح' };
-                        return [`${value.toFixed(2)} ${currency}`, labels[name] || name];
+                        return [`${Number(value).toFixed(2)} ${currency}`, labels[name as string] || name];
                       }}
                       contentStyle={{ textAlign: 'right', direction: 'rtl' }}
                     />

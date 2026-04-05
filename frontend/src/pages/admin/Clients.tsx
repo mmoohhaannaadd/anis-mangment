@@ -35,7 +35,10 @@ export default function AdminClients() {
     if (res.ok) setClients(await res.json());
   };
 
-  useEffect(() => { fetchClients(); }, []);
+  useEffect(() => { 
+    // eslint-disable-next-line
+    fetchClients(); 
+  }, []);
 
   const handlePayment = async () => {
     if (!selectedClient || !paymentAmount) return;

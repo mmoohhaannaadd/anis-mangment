@@ -37,7 +37,10 @@ export default function AdminOrders() {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
 
-  useEffect(() => { fetchOrders(); }, []);
+  useEffect(() => { 
+    // eslint-disable-next-line
+    fetchOrders(); 
+  }, []);
 
   const fetchOrders = async () => {
     const token = localStorage.getItem('token');

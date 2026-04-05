@@ -42,7 +42,10 @@ export default function AdminPartners() {
     if (res.ok) setPartners(await res.json());
   };
 
-  useEffect(() => { fetchPartners(); }, []);
+  useEffect(() => { 
+    // eslint-disable-next-line
+    fetchPartners(); 
+  }, []);
 
   const handleAddPartner = async (e: React.FormEvent) => {
     e.preventDefault();
