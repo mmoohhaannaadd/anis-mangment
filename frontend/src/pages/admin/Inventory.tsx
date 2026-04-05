@@ -4,7 +4,7 @@ import { useAppStore } from '@/store';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Package, Plus, Pencil, Trash2, PackagePlus, Search, X } from 'lucide-react';
+import { Package, Plus, Pencil, Trash2, PackagePlus, Search, X, Box } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface Product {
@@ -14,6 +14,8 @@ interface Product {
   costPrice: number;
   sellPrice: number;
   stockQuantity: number;
+  purchaseUnit: string; // 'carton' | 'piece'
+  piecesPerBox: number; // e.g. 15
 }
 
 export default function Inventory() {
@@ -25,11 +27,17 @@ export default function Inventory() {
 
   // Add product form
   const [showAddForm, setShowAddForm] = useState(false);
-  const [form, setForm] = useState({ name: '', unit: 'piece', costPrice: '', sellPrice: '', stockQuantity: '' });
+  const [form, setForm] = useState({
+    name: '', unit: 'piece', costPrice: '', sellPrice: '', stockQuantity: '',
+    purchaseUnit: 'piece', piecesPerBox: '1',
+  });
 
   // Edit product
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [editForm, setEditForm] = useState({ name: '', unit: '', costPrice: '', sellPrice: '' });
+  const [editForm, setEditForm] = useState({
+    name: '', unit: '', costPrice: '', sellPrice: '',
+    purchaseUnit: 'piece', piecesPerBox: '1',
+  });
 
   // Restock
   const [restockProduct, setRestockProduct] = useState<Product | null>(null);
@@ -58,9 +66,11 @@ export default function Inventory() {
         costPrice: Number(form.costPrice),
         sellPrice: Number(form.sellPrice),
         stockQuantity: Number(form.stockQuantity),
+        purchaseUnit: form.purchaseUnit,
+        piecesPerBox: Number(form.piecesPerBox) || 1,
       }),
     });
-    setForm({ name: '', unit: 'piece', costPrice: '', sellPrice: '', stockQuantity: '' });
+    setForm({ name: '', unit: 'piece', costPrice: '', sellPrice: '', stockQuantity: '', purchaseUnit: 'piece', piecesPerBox: '1' });
     setShowAddForm(false);
     fetchProducts();
   };
@@ -76,6 +86,8 @@ export default function Inventory() {
         unit: editForm.unit,
         costPrice: Number(editForm.costPrice),
         sellPrice: Number(editForm.sellPrice),
+        purchaseUnit: editForm.purchaseUnit,
+        piecesPerBox: Number(editForm.piecesPerBox) || 1,
       }),
     });
     setEditingProduct(null);
@@ -108,6 +120,26 @@ export default function Inventory() {
   );
 
   const unitLabels: Record<string, string> = { piece: 'قطعة', kg: 'كغ', box: 'صندوق' };
+
+  // Helper: preview pieces to be added
+  const restockPiecesPreview = () => {
+    if (!restockProduct || !restockQty || Number(restockQty) <= 0) return null;
+    const qty = Number(restockQty);
+    const isCarton = restockProduct.purchaseUnit === 'carton';
+    const pieces = isCarton ? qty * (restockProduct.piecesPerBox || 1) : qty;
+    const cost = restockProduct.costPrice * qty;
+    return { pieces, cost, isCarton };
+  };
+
+  // Helper: preview pieces when adding new product
+  const addPiecesPreview = () => {
+    if (!form.stockQuantity || Number(form.stockQuantity) <= 0) return null;
+    const qty = Number(form.stockQuantity);
+    const isCarton = form.purchaseUnit === 'carton';
+    const pieces = isCarton ? qty * (Number(form.piecesPerBox) || 1) : qty;
+    const cost = Number(form.costPrice) * qty;
+    return { pieces, cost, isCarton };
+  };
 
   return (
     <div className="space-y-6">
@@ -152,23 +184,41 @@ export default function Inventory() {
                 <CardHeader className="pb-2">
                   <CardTitle className="text-lg flex justify-between items-start">
                     <span>{p.name}</span>
-                    <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded-md">
-                      {unitLabels[p.unit] || p.unit}
-                    </span>
+                    <div className="flex gap-1 flex-col items-end">
+                      <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded-md">
+                        {unitLabels[p.unit] || p.unit}
+                      </span>
+                      {/* Badge: carton purchase indicator */}
+                      {p.purchaseUnit === 'carton' && (
+                        <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full flex items-center gap-1 font-bold">
+                          <Box className="h-3 w-3" />
+                          {p.piecesPerBox} قطعة/كرتونة
+                        </span>
+                      )}
+                    </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2 mt-2">
                     <div className="flex justify-between text-sm">
-                      <span className="text-slate-500">كمية المخزون</span>
-                      <span className={`font-bold ${p.stockQuantity < 10 ? 'text-red-600' : 'text-slate-900'}`}>{p.stockQuantity}</span>
+                      <span className="text-slate-500">كمية المخزون (قطعة)</span>
+                      <span className={`font-bold ${p.stockQuantity < 10 ? 'text-red-600' : 'text-slate-900'}`}>
+                        {p.stockQuantity}
+                        {p.purchaseUnit === 'carton' && p.piecesPerBox > 1 && (
+                          <span className="text-xs font-normal text-slate-400 mr-1">
+                            ({(p.stockQuantity / p.piecesPerBox).toFixed(1)} كرتونة)
+                          </span>
+                        )}
+                      </span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-slate-500">سعر التكلفة</span>
+                      <span className="text-slate-500">
+                        سعر التكلفة {p.purchaseUnit === 'carton' ? '(كرتونة)' : ''}
+                      </span>
                       <span className="font-medium text-slate-900">{p.costPrice} {currency}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-slate-500">سعر البيع</span>
+                      <span className="text-slate-500">سعر البيع (قطعة)</span>
                       <span className="font-bold text-primary">{p.sellPrice} {currency}</span>
                     </div>
                     <div className="flex justify-between text-sm">
@@ -183,7 +233,8 @@ export default function Inventory() {
                       className="flex-1 gap-1 text-blue-600 border-blue-200 hover:bg-blue-50"
                       onClick={() => { setRestockProduct(p); setRestockQty(''); }}
                     >
-                      <PackagePlus className="h-3.5 w-3.5" /> تعبئة
+                      <PackagePlus className="h-3.5 w-3.5" />
+                      {p.purchaseUnit === 'carton' ? 'تعبئة (كرتون)' : 'تعبئة'}
                     </Button>
                     <Button
                       variant="outline"
@@ -191,7 +242,12 @@ export default function Inventory() {
                       className="gap-1"
                       onClick={() => {
                         setEditingProduct(p);
-                        setEditForm({ name: p.name, unit: p.unit, costPrice: String(p.costPrice), sellPrice: String(p.sellPrice) });
+                        setEditForm({
+                          name: p.name, unit: p.unit,
+                          costPrice: String(p.costPrice), sellPrice: String(p.sellPrice),
+                          purchaseUnit: p.purchaseUnit || 'piece',
+                          piecesPerBox: String(p.piecesPerBox || 1),
+                        });
                       }}
                     >
                       <Pencil className="h-3.5 w-3.5" />
@@ -215,20 +271,56 @@ export default function Inventory() {
       {/* Add Product Modal */}
       {showAddForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <Card className="w-full max-w-md shadow-xl animate-in fade-in zoom-in-95">
-            <CardHeader className="flex flex-row items-center justify-between">
+          <Card className="w-full max-w-md shadow-xl animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            <CardHeader className="flex flex-row items-center justify-between sticky top-0 bg-white z-10 border-b pb-3">
               <CardTitle>إضافة منتج جديد</CardTitle>
               <Button variant="ghost" size="icon" onClick={() => setShowAddForm(false)}><X className="h-4 w-4" /></Button>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-4">
               <form onSubmit={handleAddProduct} className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">اسم المنتج</label>
                   <Input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="مثال: بقلاوة" />
                 </div>
+
+                {/* Purchase Unit */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">وحدة الشراء (كيف يشتريه الأدمن؟)</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, purchaseUnit: 'piece', piecesPerBox: '1' })}
+                      className={`border rounded-lg p-3 text-sm font-medium transition-all ${form.purchaseUnit === 'piece' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 hover:border-slate-300'}`}
+                    >
+                      🏷️ بالقطعة
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, purchaseUnit: 'carton' })}
+                      className={`border rounded-lg p-3 text-sm font-medium transition-all ${form.purchaseUnit === 'carton' ? 'border-amber-500 bg-amber-50 text-amber-700' : 'border-slate-200 hover:border-slate-300'}`}
+                    >
+                      📦 بالكرتونة
+                    </button>
+                  </div>
+                </div>
+
+                {/* Pieces per box - shown only if carton */}
+                {form.purchaseUnit === 'carton' && (
+                  <div className="space-y-2 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                    <label className="text-sm font-medium text-amber-800">عدد القطع في الكرتونة الواحدة</label>
+                    <Input
+                      type="number" min="1" required
+                      value={form.piecesPerBox}
+                      onChange={e => setForm({ ...form, piecesPerBox: e.target.value })}
+                      placeholder="مثال: 15"
+                    />
+                    <p className="text-xs text-amber-600">مثال: إذا كل كرتونة تحتوي 15 قطعة → اكتب 15</p>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">الوحدة</label>
+                    <label className="text-sm font-medium">وحدة البيع (للعميل)</label>
                     <select className="w-full border rounded-md px-3 py-2 text-sm" value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })}>
                       <option value="piece">قطعة</option>
                       <option value="kg">كغ</option>
@@ -236,20 +328,41 @@ export default function Inventory() {
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">الكمية</label>
+                    <label className="text-sm font-medium">
+                      {form.purchaseUnit === 'carton' ? 'كمية (كرتونات)' : 'الكمية الأولية (قطع)'}
+                    </label>
                     <Input type="number" required min="0" value={form.stockQuantity} onChange={e => setForm({ ...form, stockQuantity: e.target.value })} />
                   </div>
                 </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">سعر التكلفة</label>
+                    <label className="text-sm font-medium">
+                      سعر التكلفة {form.purchaseUnit === 'carton' ? '(للكرتونة)' : '(للقطعة)'}
+                    </label>
                     <Input type="number" step="0.01" required min="0" value={form.costPrice} onChange={e => setForm({ ...form, costPrice: e.target.value })} />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">سعر البيع</label>
+                    <label className="text-sm font-medium">سعر البيع (للقطعة)</label>
                     <Input type="number" step="0.01" required min="0" value={form.sellPrice} onChange={e => setForm({ ...form, sellPrice: e.target.value })} />
                   </div>
                 </div>
+
+                {/* Preview */}
+                {(() => {
+                  const preview = addPiecesPreview();
+                  return preview && (
+                    <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 text-sm space-y-1">
+                      {preview.isCarton && (
+                        <p>📦 <span className="text-slate-600">ستُضاف:</span> <strong className="text-blue-700">{preview.pieces} قطعة</strong> ({form.stockQuantity} كرتونة × {form.piecesPerBox} قطعة)</p>
+                      )}
+                      {preview.cost > 0 && (
+                        <p>💰 <span className="text-slate-600">التكلفة الإجمالية:</span> <strong className="text-red-600">{preview.cost.toFixed(2)} {currency}</strong></p>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 <div className="flex justify-end gap-2 pt-2">
                   <Button type="button" variant="outline" onClick={() => setShowAddForm(false)}>إلغاء</Button>
                   <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white">إضافة</Button>
@@ -263,19 +376,53 @@ export default function Inventory() {
       {/* Edit Product Modal */}
       {editingProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <Card className="w-full max-w-md shadow-xl animate-in fade-in zoom-in-95">
-            <CardHeader className="flex flex-row items-center justify-between">
+          <Card className="w-full max-w-md shadow-xl animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            <CardHeader className="flex flex-row items-center justify-between sticky top-0 bg-white z-10 border-b pb-3">
               <CardTitle>تعديل المنتج</CardTitle>
               <Button variant="ghost" size="icon" onClick={() => setEditingProduct(null)}><X className="h-4 w-4" /></Button>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-4">
               <form onSubmit={handleEditProduct} className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">اسم المنتج</label>
                   <Input required value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} />
                 </div>
+
+                {/* Purchase Unit */}
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">الوحدة</label>
+                  <label className="text-sm font-medium">وحدة الشراء</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditForm({ ...editForm, purchaseUnit: 'piece', piecesPerBox: '1' })}
+                      className={`border rounded-lg p-3 text-sm font-medium transition-all ${editForm.purchaseUnit === 'piece' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 hover:border-slate-300'}`}
+                    >
+                      🏷️ بالقطعة
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditForm({ ...editForm, purchaseUnit: 'carton' })}
+                      className={`border rounded-lg p-3 text-sm font-medium transition-all ${editForm.purchaseUnit === 'carton' ? 'border-amber-500 bg-amber-50 text-amber-700' : 'border-slate-200 hover:border-slate-300'}`}
+                    >
+                      📦 بالكرتونة
+                    </button>
+                  </div>
+                </div>
+
+                {editForm.purchaseUnit === 'carton' && (
+                  <div className="space-y-2 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                    <label className="text-sm font-medium text-amber-800">عدد القطع في الكرتونة</label>
+                    <Input
+                      type="number" min="1" required
+                      value={editForm.piecesPerBox}
+                      onChange={e => setEditForm({ ...editForm, piecesPerBox: e.target.value })}
+                      placeholder="مثال: 15"
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">وحدة البيع</label>
                   <select className="w-full border rounded-md px-3 py-2 text-sm" value={editForm.unit} onChange={e => setEditForm({ ...editForm, unit: e.target.value })}>
                     <option value="piece">قطعة</option>
                     <option value="kg">كغ</option>
@@ -284,11 +431,13 @@ export default function Inventory() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">سعر التكلفة</label>
+                    <label className="text-sm font-medium">
+                      سعر التكلفة {editForm.purchaseUnit === 'carton' ? '(كرتونة)' : '(قطعة)'}
+                    </label>
                     <Input type="number" step="0.01" required min="0" value={editForm.costPrice} onChange={e => setEditForm({ ...editForm, costPrice: e.target.value })} />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">سعر البيع</label>
+                    <label className="text-sm font-medium">سعر البيع (قطعة)</label>
                     <Input type="number" step="0.01" required min="0" value={editForm.sellPrice} onChange={e => setEditForm({ ...editForm, sellPrice: e.target.value })} />
                   </div>
                 </div>
@@ -311,20 +460,51 @@ export default function Inventory() {
               <Button variant="ghost" size="icon" onClick={() => setRestockProduct(null)}><X className="h-4 w-4" /></Button>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="p-3 bg-slate-50 rounded-lg border text-sm">
-                <span className="text-slate-500">الكمية الحالية: </span>
-                <strong>{restockProduct.stockQuantity} {unitLabels[restockProduct.unit] || restockProduct.unit}</strong>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">الكمية المضافة</label>
-                <Input type="number" min="1" value={restockQty} onChange={e => setRestockQty(e.target.value)} placeholder="أدخل الكمية الجديدة..." />
-              </div>
-              {restockQty && Number(restockQty) > 0 && (
-                <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 text-sm">
-                  <p>التكلفة: <strong className="text-blue-700">{(Number(restockQty) * restockProduct.costPrice).toFixed(2)} {currency}</strong></p>
-                  <p className="text-xs text-slate-500 mt-1">سيتم خصمها من الصندوق</p>
+              <div className="p-3 bg-slate-50 rounded-lg border text-sm space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">المخزون الحالي:</span>
+                  <strong>{restockProduct.stockQuantity} قطعة</strong>
                 </div>
-              )}
+                {restockProduct.purchaseUnit === 'carton' && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">ما يعادل:</span>
+                    <strong className="text-amber-600">
+                      {(restockProduct.stockQuantity / (restockProduct.piecesPerBox || 1)).toFixed(1)} كرتونة
+                    </strong>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  {restockProduct.purchaseUnit === 'carton'
+                    ? `عدد الكرتونات المضافة (${restockProduct.piecesPerBox} قطعة/كرتونة)`
+                    : 'الكمية المضافة (قطعة)'}
+                </label>
+                <Input
+                  type="number" min="1"
+                  value={restockQty}
+                  onChange={e => setRestockQty(e.target.value)}
+                  placeholder={restockProduct.purchaseUnit === 'carton' ? 'عدد الكرتونات...' : 'عدد القطع...'}
+                />
+              </div>
+
+              {(() => {
+                const preview = restockPiecesPreview();
+                return preview && (
+                  <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 text-sm space-y-1">
+                    {preview.isCarton && (
+                      <p>📦 ستُضاف: <strong className="text-blue-700">{preview.pieces} قطعة</strong> ({restockQty} كرتونة × {restockProduct.piecesPerBox})</p>
+                    )}
+                    {!preview.isCarton && (
+                      <p>✅ ستُضاف: <strong className="text-blue-700">{restockQty} قطعة</strong></p>
+                    )}
+                    <p>💰 التكلفة: <strong className="text-red-600">{preview.cost.toFixed(2)} {currency}</strong></p>
+                    <p className="text-xs text-slate-500">سيتم خصمها من الصندوق</p>
+                  </div>
+                );
+              })()}
+
               <div className="flex justify-end gap-2 pt-2">
                 <Button variant="outline" onClick={() => setRestockProduct(null)}>إلغاء</Button>
                 <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleRestock}>تأكيد التعبئة</Button>

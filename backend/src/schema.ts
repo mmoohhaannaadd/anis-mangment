@@ -18,6 +18,9 @@ export const products = sqliteTable('products', {
   costPrice: real('cost_price').notNull().default(0),
   sellPrice: real('sell_price').notNull().default(0),
   stockQuantity: real('stock_quantity').notNull().default(0),
+  // Carton/Box conversion fields
+  purchaseUnit: text('purchase_unit').notNull().default('piece'), // 'carton' | 'piece' — how admin buys it
+  piecesPerBox: integer('pieces_per_box').notNull().default(1), // e.g. 15 → 1 carton = 15 pieces
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 });
 

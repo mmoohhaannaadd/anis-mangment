@@ -162,17 +162,35 @@ app.get('/api/admin/inventory', authenticate, requireAdmin, asyncHandler(async (
 }));
 
 app.post('/api/admin/inventory', authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  const { name, unit, costPrice, sellPrice, stockQuantity } = req.body;
-  const newProduct = await db.insert(products).values({ name, unit, costPrice, sellPrice, stockQuantity }).returning();
+  const { name, unit, costPrice, sellPrice, stockQuantity, purchaseUnit, piecesPerBox } = req.body;
+  const numPiecesPerBox = Number(piecesPerBox) > 0 ? Number(piecesPerBox) : 1;
+  const parsedPurchaseUnit = purchaseUnit || 'piece';
+
+  // If adding stock by cartons, convert to pieces for storage
+  const initialBoxCount = Number(stockQuantity) || 0;
+  const initialPieces = parsedPurchaseUnit === 'carton' ? initialBoxCount * numPiecesPerBox : initialBoxCount;
+
+  const newProduct = await db.insert(products).values({
+    name, unit,
+    costPrice: Number(costPrice),
+    sellPrice: Number(sellPrice),
+    stockQuantity: initialPieces,
+    purchaseUnit: parsedPurchaseUnit,
+    piecesPerBox: numPiecesPerBox,
+  }).returning();
   
-  // adding stock costs money
-  await db.insert(cashLog).values({
-    type: 'out',
-    amount: -(costPrice * stockQuantity),
-    referenceType: 'inventory_purchase',
-    referenceId: newProduct[0].id,
-    notes: `شراء مخزون: ${stockQuantity} ${unit} من ${name}`,
-  });
+  // Cost is per carton if purchaseUnit=carton, else per piece
+  const totalCost = Number(costPrice) * initialBoxCount;
+  if (totalCost > 0) {
+    const unitLabel = parsedPurchaseUnit === 'carton' ? `كرتونة (${numPiecesPerBox} قطعة/كرتونة)` : unit;
+    await db.insert(cashLog).values({
+      type: 'out',
+      amount: -totalCost,
+      referenceType: 'inventory_purchase',
+      referenceId: newProduct[0].id,
+      notes: `شراء مخزون: ${initialBoxCount} ${unitLabel} من ${name} = ${initialPieces} قطعة`,
+    });
+  }
   
   res.json(newProduct[0]);
 }));
@@ -180,12 +198,19 @@ app.post('/api/admin/inventory', authenticate, requireAdmin, asyncHandler(async 
 // Update Product
 app.put('/api/admin/inventory/:id', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const productId = parseInt(req.params.id as string);
-  const { name, unit, costPrice, sellPrice } = req.body;
+  const { name, unit, costPrice, sellPrice, purchaseUnit, piecesPerBox } = req.body;
   
   const existing = await db.query.products.findFirst({ where: eq(products.id, productId) });
   if (!existing) { res.status(404).json({ error: 'المنتج غير موجود' }); return; }
 
-  await db.update(products).set({ name, unit, costPrice, sellPrice }).where(eq(products.id, productId));
+  const numPiecesPerBox = Number(piecesPerBox) > 0 ? Number(piecesPerBox) : 1;
+  await db.update(products).set({
+    name, unit,
+    costPrice: Number(costPrice),
+    sellPrice: Number(sellPrice),
+    purchaseUnit: purchaseUnit || 'piece',
+    piecesPerBox: numPiecesPerBox,
+  }).where(eq(products.id, productId));
   const updated = await db.query.products.findFirst({ where: eq(products.id, productId) });
   res.json(updated);
 }));
@@ -198,28 +223,37 @@ app.delete('/api/admin/inventory/:id', authenticate, requireAdmin, asyncHandler(
 }));
 
 // Restock - Add stock to existing product
+// quantity = number of cartons (if purchaseUnit='carton') or pieces
 app.post('/api/admin/inventory/:id/restock', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const productId = parseInt(req.params.id as string);
-  const { quantity } = req.body;
+  const { quantity } = req.body; // quantity entered by admin (in cartons or pieces)
   const numQty = Number(quantity);
   if (isNaN(numQty) || numQty <= 0) { res.status(400).json({ error: 'كمية غير صالحة' }); return; }
 
   const existing = await db.query.products.findFirst({ where: eq(products.id, productId) });
   if (!existing) { res.status(404).json({ error: 'المنتج غير موجود' }); return; }
 
-  const newQty = existing.stockQuantity + numQty;
+  const piecesPerBox = existing.piecesPerBox || 1;
+  const isCarton = existing.purchaseUnit === 'carton';
+
+  // Convert to pieces for stock
+  const piecesToAdd = isCarton ? numQty * piecesPerBox : numQty;
+  const newQty = existing.stockQuantity + piecesToAdd;
+
   await db.update(products).set({ stockQuantity: newQty }).where(eq(products.id, productId));
 
-  // Log the purchase cost
+  // Cost is per carton (or per piece)
+  const totalCost = existing.costPrice * numQty;
+  const unitLabel = isCarton ? `كرتونة (${piecesPerBox} قطعة)` : existing.unit;
   await db.insert(cashLog).values({
     type: 'out',
-    amount: -(existing.costPrice * numQty),
+    amount: -totalCost,
     referenceType: 'inventory_purchase',
     referenceId: productId,
-    notes: `إضافة مخزون: ${numQty} ${existing.unit} من ${existing.name}`,
+    notes: `إضافة مخزون: ${numQty} ${unitLabel} من ${existing.name} = ${piecesToAdd} قطعة`,
   });
 
-  res.json({ success: true, newQuantity: newQty });
+  res.json({ success: true, newQuantity: newQty, piecesAdded: piecesToAdd });
 }));
 
 // --- ADMIN ROUTES: ORDERS with items detail ---

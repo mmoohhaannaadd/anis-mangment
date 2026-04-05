@@ -30,8 +30,13 @@ async function migrate() {
       cost_price REAL NOT NULL,
       sell_price REAL NOT NULL,
       stock_quantity INTEGER NOT NULL DEFAULT 0,
+      purchase_unit TEXT NOT NULL DEFAULT 'piece',
+      pieces_per_box INTEGER NOT NULL DEFAULT 1,
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     )`,
+    // Add new columns to existing products table (OK if they already exist)
+    `ALTER TABLE products ADD COLUMN purchase_unit TEXT NOT NULL DEFAULT 'piece'`,
+    `ALTER TABLE products ADD COLUMN pieces_per_box INTEGER NOT NULL DEFAULT 1`,
     `CREATE TABLE IF NOT EXISTS orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       client_id INTEGER NOT NULL REFERENCES users(id),
