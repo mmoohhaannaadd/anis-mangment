@@ -44,7 +44,7 @@ export default function Cart() {
       
       // 3. Clear cart and redirect
       clearCart();
-      window.open(waLink, '_blank');
+      window.location.href = waLink;
       
     } catch (error) {
       alert('حدث خطأ أثناء إرسال الطلب');
