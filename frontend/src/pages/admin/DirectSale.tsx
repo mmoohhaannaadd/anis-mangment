@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAppStore } from '@/store';
 import { useCurrency } from '@/contexts/SettingsContext';
-import { Search, Plus, Minus, Trash2, ShoppingCart, CheckCircle2 } from 'lucide-react';
+import { Search, Plus, Minus, Trash2, ShoppingCart, CheckCircle2, User } from 'lucide-react';
 
 interface Product {
   id: number;
@@ -26,17 +26,33 @@ export default function DirectSale() {
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customerName, setCustomerName] = useState('');
+  const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
+  const [paidAmount, setPaidAmount] = useState<string>('');
   const [discount, setDiscount] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [clients, setClients] = useState<{ id: number, name: string, totalDebt: number }[]>([]);
 
   const { token } = useAppStore();
   const currency = useCurrency();
 
+  const unitLabels: Record<string, string> = { piece: 'قطعة', kg: 'كغ', box: 'كرتونة' };
+
   useEffect(() => {
     // eslint-disable-next-line
     fetchProducts();
+    fetchClients();
   }, []);
+
+  const fetchClients = async () => {
+    try {
+      const res = await fetch('/api/admin/clients', { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      setClients(data);
+    } catch (err) {
+      console.error('Failed to fetch clients', err);
+    }
+  };
 
   const fetchProducts = async () => {
     try {
@@ -99,7 +115,9 @@ export default function DirectSale() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
+          clientId: selectedClientId,
           customerName: customerName.trim() || undefined,
+          paidAmount: Number(paidAmount) || 0,
           discount: discount || 0,
           items: cart.map(item => ({
             productId: item.id,
@@ -114,8 +132,11 @@ export default function DirectSale() {
       setSuccess(true);
       setCart([]);
       setCustomerName('');
+      setSelectedClientId(null);
+      setPaidAmount('');
       setDiscount(0);
       fetchProducts(); // Refresh stock
+      fetchClients(); // Refresh debt
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: unknown) {
       alert((err as Error).message || 'حدث خطأ أثناء تأكيد الطلب');
@@ -156,13 +177,16 @@ export default function DirectSale() {
                   }`}
                   onClick={() => product.stockQuantity > 0 && addToCart(product)}
                 >
-                  <p className="font-medium text-sm truncate">{product.name}</p>
-                  <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-                    <span>{product.sellPrice.toFixed(2)} {currency}</span>
-                    <span className={product.stockQuantity < 10 ? 'text-red-500 font-bold' : ''}>
-                      متوفر {product.stockQuantity}
-                    </span>
-                  </div>
+                    <span className="font-medium text-sm truncate">{product.name}</span>
+                    <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+                      <div className="flex flex-col">
+                        <span>{product.sellPrice.toFixed(2)} {currency}</span>
+                        <span className="text-[10px] text-slate-400">/ {unitLabels[product.unit] || product.unit}</span>
+                      </div>
+                      <span className={product.stockQuantity < 10 ? 'text-red-500 font-bold' : ''}>
+                        متوفر {product.stockQuantity}
+                      </span>
+                    </div>
                 </div>
               ))}
               {filteredProducts.length === 0 && (
@@ -246,13 +270,51 @@ export default function DirectSale() {
             <div className="p-4 bg-slate-50 border-t shrink-0 space-y-4">
               <div className="space-y-3">
                 <div>
-                  <Label className="text-xs text-slate-500 mb-1 block">اسم الزبون (اختياري)</Label>
+                  <Label className="text-xs text-slate-500 mb-1 block">اختر العميل (اختياري)</Label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <User className="absolute right-3 top-2.5 h-4 w-4 text-slate-400" />
+                      <select 
+                        className="w-full h-8 pr-9 pl-3 text-sm border rounded-md bg-white appearance-none focus:ring-1 focus:ring-primary outline-none"
+                        value={selectedClientId || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSelectedClientId(val ? parseInt(val) : null);
+                          setCustomerName('');
+                        }}
+                      >
+                        <option value="">زبون نقدي (عام)</option>
+                        {clients.map(c => (
+                          <option key={c.id} value={c.id}>{c.name} {c.totalDebt > 0 ? `(دين: ${c.totalDebt})` : ''}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {!selectedClientId && (
+                  <div>
+                    <Label className="text-xs text-slate-500 mb-1 block">اسم الزبون (اختياري)</Label>
+                    <Input 
+                      placeholder="مبيعات نقدية..." 
+                      className="h-8 text-sm"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <Label className="text-xs text-slate-500 mb-1 block">المبلغ المقبوض ({currency})</Label>
                   <Input 
-                    placeholder="مبيعات نقدية..." 
-                    className="h-8 text-sm"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
+                    type="number" 
+                    placeholder="0" 
+                    className="h-8 text-sm text-left font-bold text-green-600"
+                    dir="ltr"
+                    value={paidAmount}
+                    onChange={(e) => setPaidAmount(e.target.value)}
                   />
+                  <p className="text-[10px] text-slate-400 mt-1">اترك 0 إذا كان الطلب ديناً كاملاً.</p>
                 </div>
                 <div>
                   <Label className="text-xs text-slate-500 mb-1 block">خصم إضافي إجمالي ({currency})</Label>

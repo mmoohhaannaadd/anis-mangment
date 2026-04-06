@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAppStore } from '@/store';
+import { useCurrency } from '@/contexts/SettingsContext';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { User, Wallet, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -12,6 +13,7 @@ interface BalanceData {
 
 export default function Account() {
   const { token, user } = useAppStore();
+  const currency = useCurrency();
   const [data, setData] = useState<BalanceData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -52,7 +54,7 @@ export default function Account() {
               <Wallet className={`h-12 w-12 mb-4 ${isDebt ? 'text-red-500' : 'text-green-600'}`} />
               <h3 className="text-lg font-medium text-slate-700 mb-2">رصيدك الحالي</h3>
               <div className={`text-5xl font-black mb-4 dir-ltr ${isDebt ? 'text-red-600' : 'text-green-700'}`}>
-                {data?.balance.toLocaleString()} <span className="text-2xl">د.ج</span>
+                {data?.balance.toLocaleString()} <span className="text-2xl">{currency}</span>
               </div>
               {isDebt ? (
                 <p className="text-red-600 font-bold bg-red-100 px-4 py-1 rounded-full text-sm">
@@ -76,7 +78,7 @@ export default function Account() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-slate-800">{data?.totalOrdered.toLocaleString()} د.ج</div>
+            <div className="text-2xl font-bold text-slate-800">{data?.totalOrdered.toLocaleString()} {currency}</div>
           </CardContent>
         </Card>
 
@@ -88,7 +90,7 @@ export default function Account() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-slate-800">{data?.totalPaid.toLocaleString()} د.ج</div>
+            <div className="text-2xl font-bold text-slate-800">{data?.totalPaid.toLocaleString()} {currency}</div>
           </CardContent>
         </Card>
       </div>

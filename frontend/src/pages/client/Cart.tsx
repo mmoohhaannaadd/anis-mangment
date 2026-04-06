@@ -15,6 +15,7 @@ export default function Cart() {
   const [submitting, setSubmitting] = useState(false);
 
   const total = getTotal();
+  const unitLabels: Record<string, string> = { piece: 'قطعة', kg: 'كغ', box: 'كرتونة' };
 
   const handleCheckout = async () => {
     if (items.length === 0) return;
@@ -80,7 +81,7 @@ export default function Cart() {
                 <div className="mb-4 sm:mb-0">
                   <h4 className="font-bold text-slate-900">{item.product.name}</h4>
                   <div className="text-sm text-slate-500 mt-1">
-                    {item.product.sellPrice} {settings.currency} / {item.product.unit}
+                    {item.product.sellPrice} {settings.currency} / {unitLabels[item.product.unit] || item.product.unit}
                   </div>
                 </div>
                 

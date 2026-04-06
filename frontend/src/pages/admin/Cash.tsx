@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useCurrency } from '@/contexts/SettingsContext';
+import { useCurrency, useSettings } from '@/contexts/SettingsContext';
 
 type CashLog = {
   id: number;
@@ -24,6 +24,7 @@ type Expense = {
 
 export default function AdminCash() {
   const currency = useCurrency();
+  const { settings } = useSettings();
   const [balance, setBalance] = useState(0);
   const [logs, setLogs] = useState<CashLog[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -32,6 +33,10 @@ export default function AdminCash() {
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseDesc, setExpenseDesc] = useState('');
   const [expenseCategory, setExpenseCategory] = useState('');
+
+  // Deposit Form
+  const [depositAmount, setDepositAmount] = useState('');
+  const [depositDesc, setDepositDesc] = useState('');
 
   const fetchCashData = async () => {
     const token = localStorage.getItem('token');
@@ -62,13 +67,26 @@ export default function AdminCash() {
     fetchCashData();
   };
 
+  const handleAddDeposit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!depositAmount || !depositDesc) return;
+    const token = localStorage.getItem('token');
+    await fetch('/api/admin/cash/deposit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ amount: Number(depositAmount), description: depositDesc })
+    });
+    setDepositAmount(''); setDepositDesc('');
+    fetchCashData();
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold tracking-tight text-slate-900">الصندوق والمصروفات</h1>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card className="border-blue-100 shadow-sm bg-blue-50">
           <CardHeader>
             <CardTitle className="text-blue-900">الرصيد الحالي في الصندوق</CardTitle>
@@ -78,7 +96,28 @@ export default function AdminCash() {
           </CardContent>
         </Card>
 
-        <Card className="border-blue-100 shadow-sm">
+        {settings.enableDepositCash && (
+          <Card className="border-green-100 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-green-800">إيداع رصيد في الصندوق</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleAddDeposit} className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">المبلغ</label>
+                  <Input type="number" step="0.01" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} required />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">البيان / الوصف</label>
+                  <Input type="text" placeholder="مثال: رصيد افتتاحي، كاش الكاشير..." value={depositDesc} onChange={e => setDepositDesc(e.target.value)} required />
+                </div>
+                <Button type="submit" className="w-full bg-green-600 hover:bg-green-700 text-white">تسجيل الإيداع</Button>
+              </form>
+            </CardContent>
+          </Card>
+        )}
+
+        <Card className="border-red-100 shadow-sm">
           <CardHeader>
             <CardTitle>إضافة مصروف جديد</CardTitle>
           </CardHeader>

@@ -7,6 +7,8 @@ type Settings = {
   phone: string;
   address: string;
   whatsapp: string;
+  enableInitialStock: boolean;
+  enableDepositCash: boolean;
 };
 
 const defaultSettings: Settings = {
@@ -15,6 +17,8 @@ const defaultSettings: Settings = {
   phone: '',
   address: '',
   whatsapp: '',
+  enableInitialStock: true,
+  enableDepositCash: true,
 };
 
 const SettingsContext = createContext<{

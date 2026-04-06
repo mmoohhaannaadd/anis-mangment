@@ -11,6 +11,7 @@ import Partners from './pages/admin/Partners';
 import Clients from './pages/admin/Clients';
 import Analytics from './pages/admin/Analytics';
 import Settings from './pages/admin/Settings';
+import Home from './pages/admin/Home';
 import DirectSale from './pages/admin/DirectSale';
 import Shop from './pages/client/Shop';
 import Cart from './pages/client/Cart';
@@ -34,7 +35,8 @@ function App() {
         
         {/* Admin Routes */}
         <Route path="/admin" element={<ProtectedRoute allowedRole="admin"><AdminLayout /></ProtectedRoute>}>
-          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route index element={<Navigate to="home" replace />} />
+          <Route path="home" element={<Home />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="direct-sale" element={<DirectSale />} />
           <Route path="inventory" element={<Inventory />} />

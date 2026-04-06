@@ -1,21 +1,37 @@
 import { useEffect, useState } from 'react';
 import { useAppStore } from '@/store';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Clock, CheckCircle, XCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Clock, CheckCircle, XCircle, Eye, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
+import { useCurrency } from '@/contexts/SettingsContext';
+
+interface OrderItem {
+  id: number;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+  product?: {
+    name: string;
+    unit: string;
+  };
+}
 
 interface Order {
   id: number;
   totalAmount: number;
   status: 'pending' | 'confirmed' | 'rejected' | 'delivered';
   createdAt: string;
+  items: OrderItem[];
 }
 
 export default function MyOrders() {
   const { token } = useAppStore();
+  const currency = useCurrency();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   useEffect(() => {
     fetch('/api/client/my-orders', { headers: { Authorization: `Bearer ${token}` } })
@@ -86,12 +102,68 @@ export default function MyOrders() {
                   </div>
                   <div className="space-y-1 sm:text-left">
                     <p className="text-sm text-slate-500">الإجمالي</p>
-                    <p className="font-bold text-xl text-primary">{order.totalAmount} د.ج</p>
+                    <p className="font-bold text-xl text-primary">{order.totalAmount} {currency}</p>
                   </div>
+                  <Button variant="outline" size="sm" className="gap-2 w-full sm:w-auto" onClick={() => setSelectedOrder(order)}>
+                    <Eye className="h-4 w-4" /> التفاصيل
+                  </Button>
                 </div>
               </CardContent>
             </Card>
           ))}
+        </div>
+      )}
+
+      {selectedOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <Card className="w-full max-w-lg shadow-xl animate-in fade-in zoom-in-95 max-h-[90vh] flex flex-col">
+            <CardHeader className="flex flex-row items-center justify-between border-b pb-4 shrink-0">
+              <CardTitle>تفاصيل طلب #{selectedOrder.id}</CardTitle>
+              <Button variant="ghost" size="icon" onClick={() => setSelectedOrder(null)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </CardHeader>
+            <CardContent className="overflow-y-auto p-4 space-y-4">
+              <div className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border">
+                <div>
+                  <p className="text-xs text-slate-500">تاريخ الطلب</p>
+                  <p className="font-medium text-sm">{format(new Date(selectedOrder.createdAt), "dd MMMM yyyy - hh:mm a", { locale: ar })}</p>
+                </div>
+                <div className="text-left">
+                  <p className="text-xs text-slate-500">الإجمالي</p>
+                  <p className="font-bold text-lg text-primary">{selectedOrder.totalAmount} {currency}</p>
+                </div>
+              </div>
+
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full text-sm text-right">
+                  <thead className="bg-slate-50 border-b">
+                    <tr>
+                      <th className="px-4 py-2 font-medium">المنتج</th>
+                      <th className="px-4 py-2 font-medium">الكمية</th>
+                      <th className="px-4 py-2 font-medium">السعر</th>
+                      <th className="px-4 py-2 font-medium">المجموع</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {selectedOrder.items?.map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-50">
+                        <td className="px-4 py-2 font-medium">{item.product?.name || 'منتج محذوف'}</td>
+                        <td className="px-4 py-2">{item.quantity}</td>
+                        <td className="px-4 py-2">{item.unitPrice}</td>
+                        <td className="px-4 py-2 font-bold">{item.subtotal}</td>
+                      </tr>
+                    ))}
+                    {!selectedOrder.items?.length && (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-4 text-center text-slate-500">لا توجد تفاصيل للمنتجات</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
     </div>

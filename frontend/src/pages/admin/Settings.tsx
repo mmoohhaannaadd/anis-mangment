@@ -19,6 +19,8 @@ export default function SettingsPage() {
     phone: '',
     address: '',
     whatsapp: '',
+    enableInitialStock: true,
+    enableDepositCash: true,
   });
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
@@ -41,6 +43,8 @@ export default function SettingsPage() {
           phone: data.phone || '',
           address: data.address || '',
           whatsapp: data.whatsapp || '',
+          enableInitialStock: data.enableInitialStock !== false,
+          enableDepositCash: data.enableDepositCash !== false,
         });
       })
       .finally(() => setLoading(false));
@@ -182,6 +186,36 @@ export default function SettingsPage() {
                   placeholder="مثال: رام الله - البيرة"
                 />
               </div>
+
+              {/* Advanced Toggles */}
+              <div className="pt-4 border-t space-y-4">
+                <p className="font-semibold text-slate-800 text-sm">إعدادات متقدمة (فتح النظام)</p>
+                <div className="flex items-center space-x-2 space-x-reverse">
+                  <input
+                    type="checkbox"
+                    id="enableInitialStock"
+                    checked={storeSettings.enableInitialStock}
+                    onChange={(e) => setStoreSettings({ ...storeSettings, enableInitialStock: e.target.checked })}
+                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                  <label htmlFor="enableInitialStock" className="text-sm font-medium text-slate-700 cursor-pointer">
+                    السماح بإضافة "رصيد افتتاحي" للمخزون (دون خصم تكلفة من الصندوق)
+                  </label>
+                </div>
+                <div className="flex items-center space-x-2 space-x-reverse">
+                  <input
+                    type="checkbox"
+                    id="enableDepositCash"
+                    checked={storeSettings.enableDepositCash}
+                    onChange={(e) => setStoreSettings({ ...storeSettings, enableDepositCash: e.target.checked })}
+                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                  <label htmlFor="enableDepositCash" className="text-sm font-medium text-slate-700 cursor-pointer">
+                    السماح بإضافة "كاش إيداع مباشر" للصندوق
+                  </label>
+                </div>
+              </div>
+
               <Button
                 type="submit"
                 className={`w-full gap-2 text-white transition-colors ${saved ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}`}

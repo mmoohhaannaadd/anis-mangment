@@ -85,14 +85,16 @@ app.put('/api/auth/change-password', authenticate, asyncHandler(async (req: any,
 // --- ADMIN ROUTES: ENHANCED DASHBOARD ---
 app.get('/api/admin/dashboard', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const allClients = await db.query.users.findMany({ where: eq(users.role, 'client') });
-  const allCash = await db.select({ total: sum(cashLog.amount) }).from(cashLog);
-  const totalCash = Number(allCash[0]?.total) || 0;
+  // Correct totalCash: Sum(in) - Sum(out)
+  const allIn = await db.select({ total: sql<number>`COALESCE(SUM(amount), 0)` }).from(cashLog).where(eq(cashLog.type, 'in'));
+  const allOut = await db.select({ total: sql<number>`COALESCE(SUM(amount), 0)` }).from(cashLog).where(eq(cashLog.type, 'out'));
+  const totalCashIn = Number(allIn[0]?.total) || 0;
+  const totalCashOut = Number(allOut[0]?.total) || 0;
+  const totalCash = totalCashIn - totalCashOut;
 
-  // Total revenue (all 'in' cash logs)
-  const totalIncome = await db.select({ total: sql<number>`COALESCE(SUM(CASE WHEN type = 'in' THEN amount ELSE 0 END), 0)` }).from(cashLog);
-  const totalExpenses = await db.select({ total: sql<number>`COALESCE(SUM(amount), 0)` }).from(expenses);
-  const totalRevenue = Number(totalIncome[0]?.total) || 0;
-  const totalExpense = Number(totalExpenses[0]?.total) || 0;
+  // Revenue = all cash in, Expenses = all cash out
+  const totalRevenue = totalCashIn;
+  const totalExpense = totalCashOut;
   const profit = totalRevenue - totalExpense;
 
   // Orders stats
@@ -162,7 +164,7 @@ app.get('/api/admin/inventory', authenticate, requireAdmin, asyncHandler(async (
 }));
 
 app.post('/api/admin/inventory', authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  const { name, unit, costPrice, sellPrice, stockQuantity, purchaseUnit, piecesPerBox } = req.body;
+  const { name, unit, costPrice, sellPrice, stockQuantity, purchaseUnit, piecesPerBox, isInitialStock } = req.body;
   const numPiecesPerBox = Number(piecesPerBox) > 0 ? Number(piecesPerBox) : 1;
   const parsedPurchaseUnit = purchaseUnit || 'piece';
 
@@ -181,11 +183,11 @@ app.post('/api/admin/inventory', authenticate, requireAdmin, asyncHandler(async 
   
   // Cost is per carton if purchaseUnit=carton, else per piece
   const totalCost = Number(costPrice) * initialBoxCount;
-  if (totalCost > 0) {
+  if (totalCost > 0 && !isInitialStock) {
     const unitLabel = parsedPurchaseUnit === 'carton' ? `كرتونة (${numPiecesPerBox} قطعة/كرتونة)` : unit;
     await db.insert(cashLog).values({
       type: 'out',
-      amount: -totalCost,
+      amount: totalCost,
       referenceType: 'inventory_purchase',
       referenceId: newProduct[0].id,
       notes: `شراء مخزون: ${initialBoxCount} ${unitLabel} من ${name} = ${initialPieces} قطعة`,
@@ -226,7 +228,7 @@ app.delete('/api/admin/inventory/:id', authenticate, requireAdmin, asyncHandler(
 // quantity = number of cartons (if purchaseUnit='carton') or pieces
 app.post('/api/admin/inventory/:id/restock', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const productId = parseInt(req.params.id as string);
-  const { quantity } = req.body; // quantity entered by admin (in cartons or pieces)
+  const { quantity, isInitialStock } = req.body; // quantity entered by admin (in cartons or pieces)
   const numQty = Number(quantity);
   if (isNaN(numQty) || numQty <= 0) { res.status(400).json({ error: 'كمية غير صالحة' }); return; }
 
@@ -245,13 +247,16 @@ app.post('/api/admin/inventory/:id/restock', authenticate, requireAdmin, asyncHa
   // Cost is per carton (or per piece)
   const totalCost = existing.costPrice * numQty;
   const unitLabel = isCarton ? `كرتونة (${piecesPerBox} قطعة)` : existing.unit;
-  await db.insert(cashLog).values({
-    type: 'out',
-    amount: -totalCost,
-    referenceType: 'inventory_purchase',
-    referenceId: productId,
-    notes: `إضافة مخزون: ${numQty} ${unitLabel} من ${existing.name} = ${piecesToAdd} قطعة`,
-  });
+  
+  if (!isInitialStock) {
+    await db.insert(cashLog).values({
+      type: 'out',
+      amount: totalCost,
+      referenceType: 'inventory_purchase',
+      referenceId: productId,
+      notes: `إضافة مخزون: ${numQty} ${unitLabel} من ${existing.name} = ${piecesToAdd} قطعة`,
+    });
+  }
 
   res.json({ success: true, newQuantity: newQty, piecesAdded: piecesToAdd });
 }));
@@ -263,6 +268,34 @@ app.get('/api/admin/orders', authenticate, requireAdmin, asyncHandler(async (req
     orderBy: desc(orders.id),
   });
   res.json(allOrders);
+}));
+
+app.put('/api/admin/orders/:id/items', authenticate, requireAdmin, asyncHandler(async (req, res) => {
+  const orderId = parseInt(req.params.id as string);
+  const { items } = req.body; // Array of items
+  
+  const order = await db.query.orders.findFirst({ where: eq(orders.id, orderId) });
+  if (!order) { res.status(404).json({ error: 'الطلب غير موجود' }); return; }
+  if (order.status !== 'pending') { res.status(400).json({ error: 'يمكن تعديل الطلبات قيد الانتظار فقط' }); return; }
+  
+  await db.delete(orderItems).where(eq(orderItems.orderId, orderId));
+  
+  let newTotal = 0;
+  for (const item of items) {
+    if (item.quantity <= 0) continue;
+    const subtotal = item.quantity * item.unitPrice;
+    newTotal += subtotal;
+    await db.insert(orderItems).values({
+      orderId,
+      productId: item.productId,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      subtotal
+    });
+  }
+  
+  await db.update(orders).set({ totalAmount: newTotal }).where(eq(orders.id, orderId));
+  res.json({ success: true, newTotal });
 }));
 
 app.put('/api/admin/orders/:id/status', authenticate, requireAdmin, asyncHandler(async (req, res) => {
@@ -320,22 +353,27 @@ app.put('/api/admin/orders/:id/status', authenticate, requireAdmin, asyncHandler
 
 // --- ADMIN ROUTES: DIRECT SALE (POS) ---
 app.post('/api/admin/direct-sale', authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  const { customerName, items, discount } = req.body; 
+  const { clientId, customerName, items, discount, paidAmount } = req.body; 
   // items: { productId, quantity, unitPrice }[]
   if (!items || items.length === 0) { res.status(400).json({ error: 'لا يوجد منتجات في الطلب' }); return; }
 
-  // 1. Get or create Direct Sale dummy client
-  let directClient = await db.query.users.findFirst({ where: eq(users.phone, 'direct_sale') });
-  if (!directClient) {
-    const hashedPassword = await bcrypt.hash('direct123', 10);
-    const newClient = await db.insert(users).values({
-      name: 'مبيعات نقدية (مباشرة)',
-      phone: 'direct_sale',
-      password: hashedPassword,
-      role: 'client',
-      whatsapp: 'direct_sale',
-    }).returning();
-    directClient = newClient[0];
+  let targetClientId = clientId;
+
+  // If no clientId, use or create Direct Sale dummy client
+  if (!targetClientId) {
+    let directClient = await db.query.users.findFirst({ where: eq(users.phone, 'direct_sale') });
+    if (!directClient) {
+      const hashedPassword = await bcrypt.hash('direct123', 10);
+      const newClient = await db.insert(users).values({
+        name: 'مبيعات نقدية (مباشرة)',
+        phone: 'direct_sale',
+        password: hashedPassword,
+        role: 'client',
+        whatsapp: 'direct_sale',
+      }).returning();
+      directClient = newClient[0];
+    }
+    targetClientId = directClient.id;
   }
 
   let totalAmount = 0;
@@ -364,7 +402,7 @@ app.post('/api/admin/direct-sale', authenticate, requireAdmin, asyncHandler(asyn
 
   // create order, marked as DELIVERED instantly
   const newOrder = await db.insert(orders).values({
-    clientId: directClient.id,
+    clientId: targetClientId,
     totalAmount: finalAmount,
     status: 'delivered', 
   }).returning();
@@ -373,29 +411,33 @@ app.post('/api/admin/direct-sale', authenticate, requireAdmin, asyncHandler(asyn
     await db.insert(orderItems).values({ ...dbItem, orderId: newOrder[0].id });
   }
 
-  // Record transactions (Order & Payment so debt balances)
-  const tx = await db.insert(transactions).values({
-    clientId: directClient.id,
+  // Record transactions (Order transaction)
+  await db.insert(transactions).values({
+    clientId: targetClientId,
     type: 'order',
     amount: finalAmount,
     notes: `مبيعات مباشرة ${customerName ? `(${customerName}) ` : ''}- طلب #${newOrder[0].id}`
-  }).returning();
-
-  const pTx = await db.insert(transactions).values({
-    clientId: directClient.id,
-    type: 'payment',
-    amount: finalAmount,
-    notes: `تسديد مباشر - طلب #${newOrder[0].id}`
-  }).returning();
-
-  // Cash in
-  await db.insert(cashLog).values({
-    type: 'in',
-    amount: finalAmount,
-    referenceType: 'payment',
-    referenceId: pTx[0].id,
-    notes: `مبيعات مباشرة: ${customerName || 'زبون نقدي'} - طلب #${newOrder[0].id}`
   });
+
+  // Record payment transaction if any
+  const payment = Number(paidAmount) || 0;
+  if (payment > 0) {
+    const pTx = await db.insert(transactions).values({
+      clientId: targetClientId,
+      type: 'payment',
+      amount: payment,
+      notes: `تسديد ${payment === finalAmount ? 'كامل' : 'جزئي'} - طلب #${newOrder[0].id}`
+    }).returning();
+
+    // Cash in
+    await db.insert(cashLog).values({
+      type: 'in',
+      amount: payment,
+      referenceType: 'payment',
+      referenceId: pTx[0].id,
+      notes: `مبيعات مباشرة: ${customerName || 'زبون'} - طلب #${newOrder[0].id}`
+    });
+  }
 
   res.json({ success: true, order: newOrder[0] });
 }));
@@ -486,7 +528,7 @@ app.get('/api/admin/cash', authenticate, requireAdmin, asyncHandler(async (req, 
   let balance = 0;
   logs.forEach(l => {
     if (l.type === 'in') balance += l.amount;
-    else balance -= Math.abs(l.amount);
+    else balance -= l.amount;
   });
 
   const allExpenses = await db.select().from(expenses).orderBy(desc(expenses.createdAt));
@@ -511,6 +553,22 @@ app.post('/api/admin/expenses', authenticate, requireAdmin, asyncHandler(async (
   res.json(expense[0]);
 }));
 
+app.post('/api/admin/cash/deposit', authenticate, requireAdmin, asyncHandler(async (req, res) => {
+  const { amount, description } = req.body;
+  const numAmount = Number(amount);
+  if (isNaN(numAmount) || numAmount <= 0) { res.status(400).json({ error: 'مبلغ غير صالح' }); return; }
+  
+  const log = await db.insert(cashLog).values({
+    type: 'in',
+    amount: numAmount,
+    referenceType: 'payment',
+    referenceId: 0,
+    notes: description || 'إيداع نقدي'
+  }).returning();
+
+  res.json(log[0]);
+}));
+
 // --- ADMIN ROUTES: PARTNERS (CRUD + DISTRIBUTION) ---
 app.get('/api/admin/partners', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const allPartners = await db.select().from(partners);
@@ -527,21 +585,16 @@ app.get('/api/admin/partners', authenticate, requireAdmin, asyncHandler(async (r
 }));
 
 app.post('/api/admin/partners', authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  const { name, sharePercentage } = req.body;
-  const partner = await db.insert(partners).values({ name, sharePercentage: Number(sharePercentage) }).returning();
-  res.json(partner[0]);
+  const { name, payoutType, sharePercentage, fixedAmount } = req.body;
+  const newPartner = await db.insert(partners).values({ 
+    name, 
+    payoutType: payoutType || 'percentage',
+    sharePercentage: Number(sharePercentage) || 0,
+    fixedAmount: Number(fixedAmount) || 0,
+  }).returning();
+  res.json(newPartner[0]);
 }));
 
-// Update Partner
-app.put('/api/admin/partners/:id', authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  const partnerId = parseInt(req.params.id as string);
-  const { name, sharePercentage } = req.body;
-  await db.update(partners).set({ name, sharePercentage: Number(sharePercentage) }).where(eq(partners.id, partnerId));
-  const updated = await db.query.partners.findFirst({ where: eq(partners.id, partnerId) });
-  res.json(updated);
-}));
-
-// Delete Partner
 app.delete('/api/admin/partners/:id', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const partnerId = parseInt(req.params.id as string);
   await db.delete(profitDistributions).where(eq(profitDistributions.partnerId, partnerId));
@@ -549,41 +602,55 @@ app.delete('/api/admin/partners/:id', authenticate, requireAdmin, asyncHandler(a
   res.json({ success: true });
 }));
 
-// Distribute Profits
+app.put('/api/admin/partners/:id', authenticate, requireAdmin, asyncHandler(async (req, res) => {
+  const partnerId = parseInt(req.params.id as string);
+  const { name, payoutType, sharePercentage, fixedAmount } = req.body;
+  await db.update(partners).set({ 
+    name, 
+    payoutType,
+    sharePercentage: Number(sharePercentage) || 0,
+    fixedAmount: Number(fixedAmount) || 0
+  }).where(eq(partners.id, partnerId));
+  const updated = await db.query.partners.findFirst({ where: eq(partners.id, partnerId) });
+  res.json(updated);
+}));
+
 app.post('/api/admin/partners/distribute', authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  const { totalProfit } = req.body;
-  const numProfit = Number(totalProfit);
-  if (isNaN(numProfit) || numProfit <= 0) { res.status(400).json({ error: 'مبلغ غير صالح' }); return; }
+  const { distributions } = req.body; // e.g. { "1": "500", "2": "500" }
+  if (!distributions) return res.status(400).json({ error: 'لا يوجد بيانات للتوزيع' });
 
   const allPartners = await db.select().from(partners);
   if (allPartners.length === 0) { res.status(400).json({ error: 'لا يوجد شركاء لتوزيع الأرباح' }); return; }
 
-  const distributions = [];
+  const result = [];
   for (const partner of allPartners) {
-    const partnerShare = (numProfit * partner.sharePercentage) / 100;
+    const amountStr = distributions[partner.id];
+    const amountToGive = Number(amountStr);
     
+    if (isNaN(amountToGive) || amountToGive <= 0) continue;
+
     const dist = await db.insert(profitDistributions).values({
       partnerId: partner.id,
-      amount: partnerShare,
-      notes: `توزيع أرباح: ${partnerShare.toFixed(2)} (${partner.sharePercentage}%)`,
+      amount: amountToGive,
+      notes: `توزيع حصة يدوية: ${amountToGive.toFixed(2)}`,
     }).returning();
 
     await db.update(partners).set({ 
-      totalReceived: partner.totalReceived + partnerShare 
+      totalReceived: partner.totalReceived + amountToGive 
     }).where(eq(partners.id, partner.id));
 
     await db.insert(cashLog).values({
       type: 'out',
-      amount: partnerShare,
+      amount: amountToGive,
       referenceType: 'distribution',
       referenceId: dist[0].id,
-      notes: `توزيع أرباح للشريك ${partner.name} (${partner.sharePercentage}%)`,
+      notes: `توزيع حصة الشريك يدوياً: ${partner.name}`,
     });
 
-    distributions.push({ partner: partner.name, amount: partnerShare });
+    result.push({ partner: partner.name, amount: amountToGive });
   }
 
-  res.json({ success: true, distributions });
+  res.json({ success: true, distributions: result });
 }));
 
 // --- ADMIN ROUTES: ANALYTICS ---
@@ -603,14 +670,12 @@ app.get('/api/admin/analytics', authenticate, requireAdmin, asyncHandler(async (
     const date = new Date(log.createdAt);
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
     if (!monthlyData[key]) monthlyData[key] = { revenue: 0, expenses: 0, orders: 0 };
-    if (log.type === 'in') monthlyData[key].revenue += log.amount;
-  });
-
-  allExpensesList.forEach(exp => {
-    const date = new Date(exp.createdAt);
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-    if (!monthlyData[key]) monthlyData[key] = { revenue: 0, expenses: 0, orders: 0 };
-    monthlyData[key].expenses += exp.amount;
+    
+    if (log.type === 'in') {
+      monthlyData[key].revenue += log.amount;
+    } else if (log.type === 'out') {
+      monthlyData[key].expenses += log.amount;
+    }
   });
 
   allOrdersList.forEach(order => {
@@ -680,6 +745,8 @@ app.get('/api/admin/settings', asyncHandler(async (req, res) => {
     phone: settingsObj['phone'] || '',
     address: settingsObj['address'] || '',
     whatsapp: settingsObj['whatsapp'] || '',
+    enableInitialStock: settingsObj['enableInitialStock'] !== 'false',
+    enableDepositCash: settingsObj['enableDepositCash'] !== 'false',
   };
   
   res.json(result);

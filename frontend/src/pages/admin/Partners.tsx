@@ -15,7 +15,9 @@ type Distribution = {
 type Partner = {
   id: number;
   name: string;
+  payoutType: 'percentage' | 'fixed';
   sharePercentage: number;
+  fixedAmount: number;
   totalReceived: number;
   createdAt: string;
   distributions: Distribution[];
@@ -26,20 +28,28 @@ export default function AdminPartners() {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [newPartnerName, setNewPartnerName] = useState('');
   const [newPartnerShare, setNewPartnerShare] = useState('');
+  const [newPayoutType, setNewPayoutType] = useState<'percentage' | 'fixed'>('percentage');
+  const [newFixedAmount, setNewFixedAmount] = useState('');
   
   // Edit
   const [editingPartner, setEditingPartner] = useState<Partner | null>(null);
   const [editName, setEditName] = useState('');
   const [editShare, setEditShare] = useState('');
+  const [editPayoutType, setEditPayoutType] = useState<'percentage' | 'fixed'>('percentage');
+  const [editFixedAmount, setEditFixedAmount] = useState('');
 
   // Distribution
   const [showDistribute, setShowDistribute] = useState(false);
-  const [distributeAmount, setDistributeAmount] = useState('');
+  const [manualDistributions, setManualDistributions] = useState<Record<number, string>>({});
 
   const fetchPartners = async () => {
     const token = localStorage.getItem('token');
     const res = await fetch('/api/admin/partners', { headers: { Authorization: `Bearer ${token}` } });
     if (res.ok) setPartners(await res.json());
+  };
+
+  const calculateProposedTotal = () => {
+    return Object.values(manualDistributions).reduce((acc, val) => acc + (Number(val) || 0), 0);
   };
 
   useEffect(() => { 
@@ -49,15 +59,21 @@ export default function AdminPartners() {
 
   const handleAddPartner = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPartnerName || !newPartnerShare) return;
+    if (!newPartnerName) return;
     const token = localStorage.getItem('token');
     await fetch('/api/admin/partners', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ name: newPartnerName, sharePercentage: Number(newPartnerShare) })
+      body: JSON.stringify({ 
+        name: newPartnerName, 
+        payoutType: newPayoutType,
+        sharePercentage: newPayoutType === 'percentage' ? Number(newPartnerShare) : 0,
+        fixedAmount: newPayoutType === 'fixed' ? Number(newFixedAmount) : 0
+      })
     });
     setNewPartnerName('');
     setNewPartnerShare('');
+    setNewFixedAmount('');
     fetchPartners();
   };
 
@@ -68,7 +84,12 @@ export default function AdminPartners() {
     await fetch(`/api/admin/partners/${editingPartner.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ name: editName, sharePercentage: Number(editShare) })
+      body: JSON.stringify({ 
+        name: editName, 
+        payoutType: editPayoutType,
+        sharePercentage: editPayoutType === 'percentage' ? Number(editShare) : 0,
+        fixedAmount: editPayoutType === 'fixed' ? Number(editFixedAmount) : 0
+      })
     });
     setEditingPartner(null);
     fetchPartners();
@@ -85,21 +106,23 @@ export default function AdminPartners() {
   };
 
   const handleDistribute = async () => {
-    if (!distributeAmount) return;
+    const hasAnyValue = Object.values(manualDistributions).some(val => Number(val) > 0);
+    if (!hasAnyValue) return;
+
     const token = localStorage.getItem('token');
     const res = await fetch('/api/admin/partners/distribute', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ totalProfit: Number(distributeAmount) })
+      body: JSON.stringify({ distributions: manualDistributions })
     });
     if (res.ok) {
       setShowDistribute(false);
-      setDistributeAmount('');
+      setManualDistributions({});
       fetchPartners();
     }
   };
 
-  const totalShare = partners.reduce((a, p) => a + p.sharePercentage, 0);
+  const totalShare = partners.filter(p => p.payoutType === 'percentage').reduce((a, p) => a + p.sharePercentage, 0);
 
   return (
     <div className="space-y-6">
@@ -109,8 +132,13 @@ export default function AdminPartners() {
           إدارة الشركاء
         </h1>
         {partners.length > 0 && (
-          <Button className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => setShowDistribute(true)}>
-            <Banknote className="h-4 w-4" /> توزيع الأرباح
+          <Button className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => {
+            setShowDistribute(true);
+            const initial: Record<number, string> = {};
+            partners.forEach(p => initial[p.id] = '');
+            setManualDistributions(initial);
+          }}>
+            <Banknote className="h-4 w-4" /> توزيع حصص الشركاء
           </Button>
         )}
       </div>
@@ -140,9 +168,27 @@ export default function AdminPartners() {
                   <Input type="text" value={newPartnerName} onChange={e => setNewPartnerName(e.target.value)} required placeholder="مثال: أحمد" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">نسبة الشراكة (%)</label>
-                  <Input type="number" step="0.01" min="0" max="100" placeholder="مثال: 50" value={newPartnerShare} onChange={e => setNewPartnerShare(e.target.value)} required />
+                  <label className="text-sm font-medium">نوع الحصة</label>
+                  <select
+                    className="w-full h-9 border rounded-md px-3 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    value={newPayoutType}
+                    onChange={(e) => setNewPayoutType(e.target.value as 'percentage' | 'fixed')}
+                  >
+                    <option value="percentage">نسبة مئوية</option>
+                    <option value="fixed">مبلغ ثابت</option>
+                  </select>
                 </div>
+                {newPayoutType === 'percentage' ? (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">نسبة الشراكة (%)</label>
+                    <Input type="number" step="0.01" min="0" max="100" placeholder="مثال: 50" value={newPartnerShare} onChange={e => setNewPartnerShare(e.target.value)} required />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">المبلغ الثابت</label>
+                    <Input type="number" step="0.01" min="0" placeholder="مثال: 1000" value={newFixedAmount} onChange={e => setNewFixedAmount(e.target.value)} required />
+                  </div>
+                )}
                 <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white">إضافة شريك</Button>
               </form>
             </CardContent>
@@ -158,7 +204,7 @@ export default function AdminPartners() {
                   <div className="flex justify-between items-center">
                     <CardTitle className="text-lg text-blue-900">{partner.name}</CardTitle>
                     <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-bold rounded-full">
-                      {partner.sharePercentage}%
+                      {partner.payoutType === 'percentage' ? `${partner.sharePercentage}%` : `${partner.fixedAmount} ${currency}`}
                     </span>
                   </div>
                 </CardHeader>
@@ -189,7 +235,9 @@ export default function AdminPartners() {
                       onClick={() => {
                         setEditingPartner(partner);
                         setEditName(partner.name);
+                        setEditPayoutType(partner.payoutType);
                         setEditShare(String(partner.sharePercentage));
+                        setEditFixedAmount(String(partner.fixedAmount));
                       }}
                     >
                       <Pencil className="h-3.5 w-3.5" /> تعديل
@@ -226,9 +274,27 @@ export default function AdminPartners() {
                   <Input required value={editName} onChange={e => setEditName(e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">نسبة الشراكة (%)</label>
-                  <Input type="number" step="0.01" min="0" max="100" required value={editShare} onChange={e => setEditShare(e.target.value)} />
+                  <label className="text-sm font-medium">نوع الحصة</label>
+                  <select
+                    className="w-full h-9 border rounded-md px-3 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    value={editPayoutType}
+                    onChange={(e) => setEditPayoutType(e.target.value as 'percentage' | 'fixed')}
+                  >
+                    <option value="percentage">نسبة مئوية</option>
+                    <option value="fixed">مبلغ ثابت</option>
+                  </select>
                 </div>
+                {editPayoutType === 'percentage' ? (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">نسبة الشراكة (%)</label>
+                    <Input type="number" step="0.01" min="0" max="100" required value={editShare} onChange={e => setEditShare(e.target.value)} />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">المبلغ الثابت</label>
+                    <Input type="number" step="0.01" min="0" required value={editFixedAmount} onChange={e => setEditFixedAmount(e.target.value)} />
+                  </div>
+                )}
                 <div className="flex justify-end gap-2 pt-2">
                   <Button type="button" variant="outline" onClick={() => setEditingPartner(null)}>إلغاء</Button>
                   <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white">حفظ</Button>
@@ -249,28 +315,38 @@ export default function AdminPartners() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">إجمالي المبلغ القابل للتوزيع</label>
-                <Input type="number" step="0.01" value={distributeAmount} onChange={e => setDistributeAmount(e.target.value)} placeholder="أدخل إجمالي الأرباح..." />
-              </div>
-
-              {distributeAmount && Number(distributeAmount) > 0 && (
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="bg-slate-50 p-3 text-sm font-medium">المعاينة:</div>
+                <p className="text-sm font-medium text-slate-700">أدخل المبلغ المراد توزيعه لكل شريك يدوياً:</p>
+                <div className="border rounded-lg overflow-hidden mt-4">
+                  <div className="bg-slate-50 p-3 text-sm font-medium">الشركاء:</div>
                   {partners.map(p => (
                     <div key={p.id} className="flex justify-between items-center p-3 border-t">
-                      <div>
+                      <div className="flex-1">
                         <span className="font-medium">{p.name}</span>
-                        <span className="text-xs text-slate-500 mr-2">({p.sharePercentage}%)</span>
+                        <span className="text-xs text-slate-500 mr-2">
+                          ({p.payoutType === 'percentage' ? `${p.sharePercentage}%` : 'مبلغ ثابت'})
+                        </span>
                       </div>
-                      <span className="font-bold text-emerald-700">
-                        {((Number(distributeAmount) * p.sharePercentage) / 100).toFixed(2)} {currency}
-                      </span>
+                      <div className="w-1/3 flex items-center gap-2">
+                        <Input 
+                          type="number" 
+                          step="0.01" 
+                          min="0"
+                          placeholder="المبلغ" 
+                          value={manualDistributions[p.id] || ''} 
+                          onChange={(e) => setManualDistributions({ ...manualDistributions, [p.id]: e.target.value })} 
+                        />
+                        <span className="text-sm font-bold text-slate-600">{currency}</span>
+                      </div>
                     </div>
                   ))}
+                  <div className="bg-blue-50 p-3 flex justify-between items-center border-t">
+                    <span className="font-bold text-blue-900 text-sm">إجمالي المحسوم من الصندوق:</span>
+                    <span className="font-bold text-blue-900">{calculateProposedTotal().toFixed(2)} {currency}</span>
+                  </div>
                 </div>
-              )}
+              </div>
 
-              <p className="text-xs text-slate-500">سيتم خصم المبلغ من الصندوق وتوزيعه على الشركاء حسب نسبهم.</p>
+              <p className="text-xs text-slate-500">سيتم خصم مجموع هذه المبالغ من الصندوق وتوزيعها على الشركاء.</p>
 
               <div className="flex justify-end gap-2 pt-2">
                 <Button variant="outline" onClick={() => setShowDistribute(false)}>إلغاء</Button>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useCurrency } from '@/contexts/SettingsContext';
+import { useCurrency, useSettings } from '@/contexts/SettingsContext';
 import { useAppStore } from '@/store';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,16 +20,16 @@ interface Product {
 
 export default function Inventory() {
   const currency = useCurrency();
+  const { settings } = useSettings();
   const { token } = useAppStore();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
-  // Add product form
   const [showAddForm, setShowAddForm] = useState(false);
   const [form, setForm] = useState({
     name: '', unit: 'piece', costPrice: '', sellPrice: '', stockQuantity: '',
-    purchaseUnit: 'piece', piecesPerBox: '1',
+    purchaseUnit: 'piece', piecesPerBox: '1', isInitialStock: false
   });
 
   // Edit product
@@ -42,6 +42,7 @@ export default function Inventory() {
   // Restock
   const [restockProduct, setRestockProduct] = useState<Product | null>(null);
   const [restockQty, setRestockQty] = useState('');
+  const [isRestockInitial, setIsRestockInitial] = useState(false);
 
   const fetchProducts = () => {
     fetch('/api/admin/inventory', { headers: { Authorization: `Bearer ${token}` } })
@@ -68,9 +69,10 @@ export default function Inventory() {
         stockQuantity: Number(form.stockQuantity),
         purchaseUnit: form.purchaseUnit,
         piecesPerBox: Number(form.piecesPerBox) || 1,
+        isInitialStock: form.isInitialStock,
       }),
     });
-    setForm({ name: '', unit: 'piece', costPrice: '', sellPrice: '', stockQuantity: '', purchaseUnit: 'piece', piecesPerBox: '1' });
+    setForm({ name: '', unit: 'piece', costPrice: '', sellPrice: '', stockQuantity: '', purchaseUnit: 'piece', piecesPerBox: '1', isInitialStock: false });
     setShowAddForm(false);
     fetchProducts();
   };
@@ -108,10 +110,11 @@ export default function Inventory() {
     await fetch(`/api/admin/inventory/${restockProduct.id}/restock`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ quantity: Number(restockQty) }),
+      body: JSON.stringify({ quantity: Number(restockQty), isInitialStock: isRestockInitial }),
     });
     setRestockProduct(null);
     setRestockQty('');
+    setIsRestockInitial(false);
     fetchProducts();
   };
 
@@ -222,9 +225,21 @@ export default function Inventory() {
                       <span className="font-bold text-primary">{p.sellPrice} {currency}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-slate-500">هامش الربح</span>
-                      <span className="font-bold text-emerald-600">{(p.sellPrice - p.costPrice).toFixed(2)} {currency}</span>
+                      <span className="text-slate-500">
+                        هامش الربح {p.purchaseUnit === 'carton' ? '(لكل كرتونة)' : ''}
+                      </span>
+                      <span className="font-bold text-emerald-600">
+                        {((p.sellPrice * (p.piecesPerBox || 1)) - p.costPrice).toFixed(2)} {currency}
+                      </span>
                     </div>
+                    {p.purchaseUnit === 'carton' && p.piecesPerBox > 1 && (
+                      <div className="flex justify-between text-xs text-emerald-500">
+                        <span>هامش الربح لكل قطعة</span>
+                        <span className="font-medium">
+                          {(p.sellPrice - (p.costPrice / p.piecesPerBox)).toFixed(2)} {currency}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div className="flex gap-2 mt-4 pt-3 border-t">
                     <Button
@@ -356,12 +371,27 @@ export default function Inventory() {
                       {preview.isCarton && (
                         <p>📦 <span className="text-slate-600">ستُضاف:</span> <strong className="text-blue-700">{preview.pieces} قطعة</strong> ({form.stockQuantity} كرتونة × {form.piecesPerBox} قطعة)</p>
                       )}
-                      {preview.cost > 0 && (
+                      {preview.cost > 0 && !form.isInitialStock && (
                         <p>💰 <span className="text-slate-600">التكلفة الإجمالية:</span> <strong className="text-red-600">{preview.cost.toFixed(2)} {currency}</strong></p>
                       )}
                     </div>
                   );
                 })()}
+
+                {settings.enableInitialStock && (
+                  <div className="flex items-center space-x-2 space-x-reverse pt-2 mt-4">
+                    <input
+                      type="checkbox"
+                      id="initialStock"
+                      checked={form.isInitialStock}
+                      onChange={(e) => setForm({ ...form, isInitialStock: e.target.checked })}
+                      className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <label htmlFor="initialStock" className="text-sm font-medium text-slate-700 cursor-pointer">
+                      رصيد افتتاحي للمحل (لن تُخصم التكلفة من الصندوق)
+                    </label>
+                  </div>
+                )}
 
                 <div className="flex justify-end gap-2 pt-2">
                   <Button type="button" variant="outline" onClick={() => setShowAddForm(false)}>إلغاء</Button>
@@ -499,11 +529,30 @@ export default function Inventory() {
                     {!preview.isCarton && (
                       <p>✅ ستُضاف: <strong className="text-blue-700">{restockQty} قطعة</strong></p>
                     )}
-                    <p>💰 التكلفة: <strong className="text-red-600">{preview.cost.toFixed(2)} {currency}</strong></p>
-                    <p className="text-xs text-slate-500">سيتم خصمها من الصندوق</p>
+                    {!isRestockInitial && (
+                      <>
+                        <p>💰 التكلفة: <strong className="text-red-600">{preview.cost.toFixed(2)} {currency}</strong></p>
+                        <p className="text-xs text-slate-500">سيتم خصمها من الصندوق</p>
+                      </>
+                    )}
                   </div>
                 );
               })()}
+
+              {settings.enableInitialStock && (
+                <div className="flex items-center space-x-2 space-x-reverse pt-2 mt-4">
+                  <input
+                    type="checkbox"
+                    id="restockInitial"
+                    checked={isRestockInitial}
+                    onChange={(e) => setIsRestockInitial(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                  <label htmlFor="restockInitial" className="text-sm font-medium text-slate-700 cursor-pointer">
+                    رصيد افتتاحي (لن تُخصم التكلفة من الصندوق)
+                  </label>
+                </div>
+              )}
 
               <div className="flex justify-end gap-2 pt-2">
                 <Button variant="outline" onClick={() => setRestockProduct(null)}>إلغاء</Button>

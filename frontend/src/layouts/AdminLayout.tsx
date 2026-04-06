@@ -3,13 +3,13 @@ import { useAppStore } from '@/store';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
+  Home,
   LayoutDashboard,
   Users,
   Package,
   ShoppingCart,
   TrendingUp,
   Wallet,
-  Receipt,
   Handshake,
   Settings,
   Store,
@@ -19,14 +19,14 @@ import {
 import { useState } from 'react';
 
 const navItems = [
+  { href: '/admin/home', icon: Home, label: 'الصفحة الرئيسية' },
   { href: '/admin/dashboard', icon: LayoutDashboard, label: 'لوحة القيادة' },
   { href: '/admin/direct-sale', icon: Store, label: 'البيع المباشر' },
   { href: '/admin/clients', icon: Users, label: 'العملاء' },
   { href: '/admin/inventory', icon: Package, label: 'المخزون' },
   { href: '/admin/orders', icon: ShoppingCart, label: 'الطلبات' },
   { href: '/admin/analytics', icon: TrendingUp, label: 'التحليلات' },
-  { href: '/admin/cash', icon: Wallet, label: 'الصندوق' },
-  { href: '/admin/expenses', icon: Receipt, label: 'المصروفات' },
+  { href: '/admin/cash', icon: Wallet, label: 'الصندوق والمصروفات' },
   { href: '/admin/partners', icon: Handshake, label: 'الشركاء' },
   { href: '/admin/settings', icon: Settings, label: 'الإعدادات' },
 ];

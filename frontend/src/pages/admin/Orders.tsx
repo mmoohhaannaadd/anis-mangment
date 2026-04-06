@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Search, Eye, X, ShoppingCart } from 'lucide-react';
+import { Search, Eye, X, ShoppingCart, Pencil, Trash2 } from 'lucide-react';
 import { useCurrency } from '@/contexts/SettingsContext';
 
 type OrderItem = {
@@ -24,7 +24,7 @@ type Order = {
   items?: OrderItem[];
 };
 
-type FilterStatus = 'all' | 'pending' | 'confirmed' | 'delivered';
+type FilterStatus = 'all' | 'pending' | 'confirmed';
 
 export default function AdminOrders() {
   const currency = useCurrency();
@@ -32,8 +32,11 @@ export default function AdminOrders() {
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [detailOrder, setDetailOrder] = useState<Order | null>(null);
+  const [isEditingMode, setIsEditingMode] = useState(false);
+  const [editingOrderItems, setEditingOrderItems] = useState<OrderItem[]>([]);
   const [paidAmount, setPaidAmount] = useState('');
-  const [newStatus, setNewStatus] = useState<'confirmed'|'delivered'>('confirmed');
+  const [paymentError, setPaymentError] = useState('');
+  const [newStatus, setNewStatus] = useState<'confirmed'>('confirmed');
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
 
@@ -41,6 +44,8 @@ export default function AdminOrders() {
     // eslint-disable-next-line
     fetchOrders(); 
   }, []);
+
+  const unitLabels: Record<string, string> = { piece: 'قطعة', kg: 'كغ', box: 'كرتونة' };
 
   const fetchOrders = async () => {
     const token = localStorage.getItem('token');
@@ -53,6 +58,21 @@ export default function AdminOrders() {
 
   const updateStatus = async () => {
     if (!selectedOrder) return;
+
+    if (paidAmount !== '') {
+      const pAmt = Number(paidAmount);
+      if (isNaN(pAmt) || pAmt < 0) {
+        setPaymentError('لا يمكن إدخال مبلغ سالب');
+        return;
+      }
+      if (pAmt > selectedOrder.totalAmount) {
+        setPaymentError('المبلغ المدفوع لا يمكن أن يكون أكبر من إجمالي الطلب');
+        return;
+      }
+    }
+    
+    setPaymentError('');
+
     const token = localStorage.getItem('token');
     await fetch(`/api/admin/orders/${selectedOrder.id}/status`, {
       method: 'PUT',
@@ -64,11 +84,25 @@ export default function AdminOrders() {
     fetchOrders();
   };
 
+  const saveOrderEdits = async () => {
+    if (!detailOrder) return;
+    const token = localStorage.getItem('token');
+    const res = await fetch(`/api/admin/orders/${detailOrder.id}/items`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ items: editingOrderItems })
+    });
+    if (res.ok) {
+      setDetailOrder(null);
+      setIsEditingMode(false);
+      fetchOrders();
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending': return <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-amber-100 text-amber-800 border-amber-200">⏳ قيد الانتظار</span>;
       case 'confirmed': return <span className="inline-flex items-center rounded-full border border-transparent px-2.5 py-0.5 text-xs font-semibold bg-blue-600 text-white shadow">✓ مؤكد</span>;
-      case 'delivered': return <span className="inline-flex items-center rounded-full border border-transparent px-2.5 py-0.5 text-xs font-semibold bg-green-600 text-white shadow">✓✓ تم التوصيل</span>;
       default: return <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold">{status}</span>;
     }
   };
@@ -86,7 +120,6 @@ export default function AdminOrders() {
     all: orders.length,
     pending: orders.filter(o => o.status === 'pending').length,
     confirmed: orders.filter(o => o.status === 'confirmed').length,
-    delivered: orders.filter(o => o.status === 'delivered').length,
   };
 
   return (
@@ -104,7 +137,7 @@ export default function AdminOrders() {
 
       {/* Status Filter Tabs */}
       <div className="flex gap-2 flex-wrap">
-        {([['all', 'الكل'], ['pending', '⏳ قيد الانتظار'], ['confirmed', '✓ مؤكد'], ['delivered', '✓✓ تم التوصيل']] as [FilterStatus, string][]).map(([key, label]) => (
+        {([['all', 'الكل'], ['pending', '⏳ قيد الانتظار'], ['confirmed', '✓ مؤكد']] as [FilterStatus, string][]).map(([key, label]) => (
           <Button
             key={key}
             variant={filterStatus === key ? "default" : "outline"}
@@ -113,7 +146,7 @@ export default function AdminOrders() {
             className="gap-1"
           >
             {label}
-            <span className="bg-white/20 text-xs px-1.5 rounded-full">{statusCounts[key]}</span>
+            <span className="bg-white/20 text-xs px-1.5 rounded-full">{statusCounts[key as keyof typeof statusCounts]}</span>
           </Button>
         ))}
       </div>
@@ -155,23 +188,13 @@ export default function AdminOrders() {
                     <Eye className="h-3.5 w-3.5" /> التفاصيل
                   </Button>
                   {order.status === 'pending' && (
-                    <>
-                      <Button 
-                        size="sm"
-                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white" 
-                        onClick={() => { setSelectedOrder(order); setNewStatus('confirmed'); }}
-                      >
-                        تأكيد
-                      </Button>
-                      <Button 
-                        variant="outline"
-                        size="sm"
-                        className="flex-1 border-green-200 text-green-700 hover:bg-green-50"
-                        onClick={() => { setSelectedOrder(order); setNewStatus('delivered'); }}
-                      >
-                        توصيل
-                      </Button>
-                    </>
+                    <Button 
+                      size="sm"
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white" 
+                      onClick={() => { setSelectedOrder(order); setNewStatus('confirmed'); }}
+                    >
+                      تأكيد
+                    </Button>
                   )}
                 </div>
               </CardContent>
@@ -196,8 +219,19 @@ export default function AdminOrders() {
                 <p className="text-sm text-slate-500 mt-1">{detailOrder.client.name} - {detailOrder.client.phone}</p>
               </div>
               <div className="flex items-center gap-2">
+                {!isEditingMode && detailOrder.status === 'pending' && (
+                  <Button variant="outline" size="sm" onClick={() => {
+                    setIsEditingMode(true);
+                    setEditingOrderItems(detailOrder.items ? JSON.parse(JSON.stringify(detailOrder.items)) : []);
+                  }} className="gap-1 h-8">
+                    <Pencil className="h-3.5 w-3.5" /> تعديل
+                  </Button>
+                )}
                 {getStatusBadge(detailOrder.status)}
-                <Button variant="ghost" size="icon" onClick={() => setDetailOrder(null)}><X className="h-4 w-4" /></Button>
+                <Button variant="ghost" size="icon" onClick={() => {
+                  setDetailOrder(null);
+                  setIsEditingMode(false);
+                }}><X className="h-4 w-4" /></Button>
               </div>
             </CardHeader>
             <CardContent className="pt-4 space-y-4">
@@ -210,19 +244,45 @@ export default function AdminOrders() {
                       <th className="text-center p-3 font-medium text-slate-600">الكمية</th>
                       <th className="text-center p-3 font-medium text-slate-600">السعر</th>
                       <th className="text-left p-3 font-medium text-slate-600">المجموع</th>
+                      {isEditingMode && <th className="p-3"></th>}
                     </tr>
                   </thead>
                   <tbody>
-                    {detailOrder.items && detailOrder.items.map((item) => (
+                    {(isEditingMode ? editingOrderItems : detailOrder.items)?.map((item) => (
                       <tr key={item.id} className="border-t">
-                        <td className="p-3 font-medium">{item.product?.name || `منتج #${item.productId}`}</td>
-                        <td className="p-3 text-center">{item.quantity}</td>
+                        <td className="p-3 font-medium">
+                          {item.product?.name || `منتج #${item.productId}`}
+                          <span className="text-[10px] text-slate-400 mr-1">({unitLabels[item.product?.unit || ''] || item.product?.unit})</span>
+                        </td>
+                        <td className="p-3 text-center">
+                          {isEditingMode ? (
+                            <Input 
+                              type="number" 
+                              min="1" 
+                              className="w-16 h-8 text-center px-1 inline-block" 
+                              value={item.quantity} 
+                              onChange={(e) => {
+                                const newQty = parseInt(e.target.value) || 1;
+                                setEditingOrderItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: newQty, subtotal: newQty * i.unitPrice } : i));
+                              }}
+                            />
+                          ) : item.quantity}
+                        </td>
                         <td className="p-3 text-center">{item.unitPrice} {currency}</td>
                         <td className="p-3 text-left font-bold">{item.subtotal} {currency}</td>
+                        {isEditingMode && (
+                          <td className="p-3 text-left">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-50" onClick={() => {
+                               setEditingOrderItems(prev => prev.filter(i => i.id !== item.id));
+                            }}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                     {(!detailOrder.items || detailOrder.items.length === 0) && (
-                      <tr><td colSpan={4} className="p-4 text-center text-slate-500">لا توجد تفاصيل أصناف</td></tr>
+                      <tr><td colSpan={isEditingMode ? 5 : 4} className="p-4 text-center text-slate-500">لا توجد تفاصيل أصناف</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -230,12 +290,23 @@ export default function AdminOrders() {
               
               <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg border border-blue-100">
                 <span className="font-medium text-blue-900">الإجمالي</span>
-                <span className="text-xl font-bold text-blue-700">{detailOrder.totalAmount} {currency}</span>
+                <span className="text-xl font-bold text-blue-700">
+                  {isEditingMode 
+                    ? editingOrderItems.reduce((acc, item) => acc + item.subtotal, 0)
+                    : detailOrder.totalAmount} {currency}
+                </span>
               </div>
               
-              <div className="text-xs text-slate-500 text-center">
-                تاريخ الطلب: {new Date(detailOrder.createdAt).toLocaleString('ar-EG')}
-              </div>
+              {isEditingMode ? (
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="outline" onClick={() => setIsEditingMode(false)}>إلغاء التعديل</Button>
+                  <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={saveOrderEdits}>حفظ التعديلات</Button>
+                </div>
+              ) : (
+                <div className="text-xs text-slate-500 text-center">
+                  تاريخ الطلب: {new Date(detailOrder.createdAt).toLocaleString('ar-EG')}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -272,20 +343,30 @@ export default function AdminOrders() {
                 <label className="text-sm font-medium">المبلغ المدفوع (اختياري)</label>
                 <Input 
                   type="number" 
+                  min="0"
+                  max={selectedOrder.totalAmount}
                   placeholder="أدخل المبلغ المقبوض من العميل..."
                   value={paidAmount}
-                  onChange={(e) => setPaidAmount(e.target.value)}
-                  className="border-slate-300"
+                  onChange={(e) => {
+                    setPaidAmount(e.target.value);
+                    setPaymentError('');
+                  }}
+                  className={`border-slate-300 ${paymentError ? 'border-red-500' : ''}`}
                 />
+                {paymentError && <p className="text-xs text-red-500 mt-1 mb-1">{paymentError}</p>}
                 <p className="text-xs text-slate-500">
                   اترك الحقل فارغاً أو اكتب 0 في حال لم يتم الدفع بعد (يُسجل كمديونية على حساب العميل).
                 </p>
               </div>
 
               <div className="flex justify-end gap-2 pt-4">
-                <Button variant="outline" onClick={() => setSelectedOrder(null)}>إلغاء</Button>
+                <Button variant="outline" onClick={() => {
+                  setSelectedOrder(null);
+                  setPaymentError('');
+                  setPaidAmount('');
+                }}>إلغاء</Button>
                 <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={updateStatus}>
-                  {newStatus === 'confirmed' ? 'تأكيد الطلب' : 'تأكيد التوصيل'}
+                  تأكيد الطلب
                 </Button>
               </div>
             </CardContent>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAppStore } from '@/store';
 import { useCartStore, type Product } from '@/store/cartStore';
+import { useCurrency } from '@/contexts/SettingsContext';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +10,7 @@ import { motion } from 'framer-motion';
 
 export default function Shop() {
   const { token } = useAppStore();
+  const currency = useCurrency();
   const { addToCart, items } = useCartStore();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,6 +30,8 @@ export default function Shop() {
   const filteredProducts = products.filter(p =>
     p.name.includes(search)
   );
+
+  const unitLabels: Record<string, string> = { piece: 'قطعة', kg: 'كغ', box: 'كرتونة' };
 
   return (
     <div className="space-y-6">
@@ -69,14 +73,14 @@ export default function Shop() {
                   <CardHeader className="pb-2">
                     <CardTitle className="text-lg flex justify-between">
                       <span>{p.name}</span>
-                      <span className="text-sm bg-slate-100 text-slate-600 px-2 py-1 rounded-md">{p.unit}</span>
+                      <span className="text-sm bg-slate-100 text-slate-600 px-2 py-1 rounded-md">{unitLabels[p.unit] || p.unit}</span>
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="flex-1 flex flex-col justify-between">
                     <div className="space-y-2 mt-4 mb-6">
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-500">سعر الوحدة</span>
-                        <span className="font-bold text-primary">{p.sellPrice} د.ج</span>
+                        <span className="font-bold text-primary">{p.sellPrice} {currency}</span>
                       </div>
                     </div>
                     {inCart ? (
