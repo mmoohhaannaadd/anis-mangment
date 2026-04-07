@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +23,7 @@ interface CartItem extends Product {
 }
 
 export default function DirectSale() {
+  const { setCartCount } = useAppStore();
   const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -67,6 +69,11 @@ export default function DirectSale() {
   const filteredProducts = products.filter(p => 
     p.name.includes(search) || p.id.toString().includes(search)
   );
+
+  // Update global cart count for nav badge
+  useEffect(() => {
+    setCartCount(cart.reduce((acc, item) => acc + item.quantity, 0));
+  }, [cart, setCartCount]);
 
   const addToCart = (product: Product) => {
     setCart(prev => {
@@ -153,7 +160,7 @@ export default function DirectSale() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Products List */}
-        <Card className="lg:col-span-2 flex flex-col h-[calc(100vh-12rem)]">
+        <Card className="lg:col-span-2 flex flex-col h-full lg:h-[calc(100vh-12rem)] min-h-[400px]">
           <CardHeader className="pb-3 shrink-0">
             <div className="relative">
               <Search className="absolute right-3 top-2.5 h-4 w-4 text-slate-400" />
@@ -168,14 +175,27 @@ export default function DirectSale() {
           <CardContent className="flex-1 overflow-y-auto">
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
               {filteredProducts.map(product => (
-                <div 
+                <motion.div 
                   key={product.id} 
-                  className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                  whileTap={{ scale: 0.95 }}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`border rounded-lg p-4 cursor-pointer transition-all shadow-sm ${
                     product.stockQuantity > 0 
-                      ? 'hover:border-primary hover:bg-primary/5 bg-white' 
+                      ? 'hover:border-primary hover:bg-primary/5 bg-white active:bg-primary/10' 
                       : 'opacity-50 bg-slate-50 cursor-not-allowed'
                   }`}
-                  onClick={() => product.stockQuantity > 0 && addToCart(product)}
+                  onClick={() => {
+                    if (product.stockQuantity > 0) {
+                      addToCart(product);
+                      // Visual feedback
+                      const toast = document.createElement('div');
+                      toast.className = 'fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-primary text-white px-4 py-2 rounded-full text-sm font-bold animate-bounce z-[200] pointer-events-none';
+                      toast.innerText = 'تمت الإضافة للسلة 🛒';
+                      document.body.appendChild(toast);
+                      setTimeout(() => toast.remove(), 800);
+                    }
+                  }}
                 >
                     <span className="font-medium text-sm truncate">{product.name}</span>
                     <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
@@ -187,7 +207,7 @@ export default function DirectSale() {
                         متوفر {product.stockQuantity}
                       </span>
                     </div>
-                </div>
+                </motion.div>
               ))}
               {filteredProducts.length === 0 && (
                 <div className="col-span-full py-12 text-center text-slate-500">
@@ -199,7 +219,7 @@ export default function DirectSale() {
         </Card>
 
         {/* Cart */}
-        <Card className="flex flex-col h-[calc(100vh-12rem)] shadow-md border-primary/20">
+        <Card id="cart-section" className="flex flex-col h-full lg:h-[calc(100vh-12rem)] shadow-md border-primary/20 min-h-[500px]">
           <CardHeader className="bg-primary/5 pb-4 shrink-0">
             <CardTitle className="text-lg flex items-center gap-2">
               <ShoppingCart className="h-5 w-5 text-primary" />

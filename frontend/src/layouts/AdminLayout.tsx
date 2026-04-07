@@ -33,7 +33,7 @@ const navItems = [
 ];
 
 export default function AdminLayout() {
-  const { user, logout } = useAppStore();
+  const { user, logout, cartCount } = useAppStore();
   const location = useLocation();
   const [isSidebarOpen, setSidebarOpen] = useState(false);
 
@@ -145,10 +145,15 @@ export default function AdminLayout() {
               )}
             >
               <div className={cn(
-                "p-2 rounded-xl transition-all duration-300",
+                "p-2 rounded-xl transition-all duration-300 relative",
                 isActive ? "bg-primary/10" : ""
               )}>
                 <Icon className={cn("h-5 w-5", isActive ? "stroke-[2.5px]" : "stroke-[1.5px]")} />
+                {item.href === '/admin/direct-sale' && cartCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white animate-pulse">
+                    {cartCount}
+                  </span>
+                )}
               </div>
               <span className={cn("text-[9px] font-bold uppercase tracking-tight", isActive ? "opacity-100" : "opacity-60")}>
                 {item.label}

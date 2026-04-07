@@ -9,6 +9,8 @@ export interface User {
 interface AppState {
   token: string | null;
   user: User | null;
+  cartCount: number;
+  setCartCount: (count: number) => void;
   setAuth: (token: string, user: User) => void;
   logout: () => void;
 }
@@ -16,6 +18,8 @@ interface AppState {
 export const useAppStore = create<AppState>((set) => ({
   token: localStorage.getItem('token'),
   user: localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user') as string) : null,
+  cartCount: 0,
+  setCartCount: (cartCount) => set({ cartCount }),
   setAuth: (token, user) => {
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(user));
@@ -24,6 +28,6 @@ export const useAppStore = create<AppState>((set) => ({
   logout: () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    set({ token: null, user: null });
+    set({ token: null, user: null, cartCount: 0 });
   },
 }));
