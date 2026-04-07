@@ -84,20 +84,65 @@ app.put('/api/auth/change-password', authenticate, asyncHandler(async (req: any,
 
 // --- ADMIN ROUTES: ENHANCED DASHBOARD ---
 app.get('/api/admin/dashboard', authenticate, requireAdmin, asyncHandler(async (req, res) => {
+  const { startDate, endDate } = req.query;
+  
+  const start = startDate ? new Date(startDate as string) : null;
+  const end = endDate ? new Date(endDate as string) : null;
+  if (end) end.setHours(23, 59, 59, 999);
+
   const allClients = await db.query.users.findMany({ where: eq(users.role, 'client') });
-  // Correct totalCash: Sum(in) - Sum(out)
+  
+  // 1. Total Cash: Tray balance (Sum In - Sum Out) - Keep as overall balance
   const allIn = await db.select({ total: sql<number>`COALESCE(SUM(amount), 0)` }).from(cashLog).where(eq(cashLog.type, 'in'));
   const allOut = await db.select({ total: sql<number>`COALESCE(SUM(amount), 0)` }).from(cashLog).where(eq(cashLog.type, 'out'));
-  const totalCashIn = Number(allIn[0]?.total) || 0;
-  const totalCashOut = Number(allOut[0]?.total) || 0;
-  const totalCash = totalCashIn - totalCashOut;
+  const totalCash = (Number(allIn[0]?.total) || 0) - (Number(allOut[0]?.total) || 0);
 
-  // Revenue = all cash in, Expenses = all cash out
-  const totalRevenue = totalCashIn;
-  const totalExpense = totalCashOut;
-  const profit = totalRevenue - totalExpense;
+  // 2. Real Revenue (Total Sales) & COGS - Filtered by date
+  const ordersWhere = (start && end) 
+    ? and(
+        sql`${orders.status} IN ('confirmed', 'delivered')`,
+        gte(orders.createdAt, start),
+        lte(orders.createdAt, end)
+      )
+    : sql`${orders.status} IN ('confirmed', 'delivered')`;
 
-  // Orders stats
+  const validOrders = await db.query.orders.findMany({
+    where: ordersWhere,
+    with: { items: { with: { product: true } } }
+  });
+
+  let totalSalesRevenue = 0;
+  let totalCOGS = 0;
+
+  for (const order of validOrders) {
+    totalSalesRevenue += order.totalAmount;
+    for (const item of order.items) {
+      const product = (item as any).product;
+      if (product) {
+        const costPerPiece = product.costPrice / (product.purchaseUnit === 'carton' ? product.piecesPerBox : 1);
+        totalCOGS += item.quantity * costPerPiece;
+      }
+    }
+  }
+
+  // 3. Operating Expenses - Filtered by date
+  const expensesWhere = (start && end)
+    ? and(
+        gte(expenses.createdAt, start),
+        lte(expenses.createdAt, end)
+      )
+    : undefined;
+
+  const allExp = await db.select({ total: sql<number>`COALESCE(SUM(amount), 0)` })
+    .from(expenses)
+    .where(expensesWhere);
+  const totalOperatingExpenses = Number(allExp[0]?.total) || 0;
+
+  // 4. Net Profit = Gross Profit - Operating Expenses
+  const profit = totalSalesRevenue - totalCOGS - totalOperatingExpenses;
+  const totalCombinedExpense = totalCOGS + totalOperatingExpenses;
+
+  // Orders stats - Overall
   const allOrders = await db.select().from(orders);
   const pendingOrders = allOrders.filter(o => o.status === 'pending').length;
   const confirmedOrders = allOrders.filter(o => o.status === 'confirmed' || o.status === 'delivered').length;
@@ -112,7 +157,7 @@ app.get('/api/admin/dashboard', authenticate, requireAdmin, asyncHandler(async (
   const totalPaid = allTx.filter(t => t.type === 'payment').reduce((a, c) => a + c.amount, 0);
   const totalDebts = totalOrdered - totalPaid;
 
-  // Recent activities (last 10)
+  // Recent activities (last 15)
   const recentCashLogs = await db.select().from(cashLog).orderBy(desc(cashLog.createdAt)).limit(10);
   const recentOrders = await db.query.orders.findMany({
     with: { client: true },
@@ -138,14 +183,13 @@ app.get('/api/admin/dashboard', authenticate, requireAdmin, asyncHandler(async (
       status: order.status,
     });
   });
-  // Sort by date descending
   activities.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   
   res.json({
     totalClients: allClients.length,
     totalCash,
-    totalRevenue,
-    totalExpense: totalExpense,
+    totalRevenue: totalSalesRevenue,
+    totalExpense: totalCombinedExpense,
     profit,
     pendingOrders,
     confirmedOrders,
@@ -617,7 +661,7 @@ app.put('/api/admin/partners/:id', authenticate, requireAdmin, asyncHandler(asyn
 
 app.post('/api/admin/partners/distribute', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const { distributions } = req.body; // e.g. { "1": "500", "2": "500" }
-  if (!distributions) return res.status(400).json({ error: 'لا يوجد بيانات للتوزيع' });
+  if (!distributions) { res.status(400).json({ error: 'لا يوجد بيانات للتوزيع' }); return; }
 
   const allPartners = await db.select().from(partners);
   if (allPartners.length === 0) { res.status(400).json({ error: 'لا يوجد شركاء لتوزيع الأرباح' }); return; }
@@ -661,28 +705,39 @@ app.get('/api/admin/analytics', authenticate, requireAdmin, asyncHandler(async (
 
   const allCashLogs = await db.select().from(cashLog).orderBy(cashLog.createdAt);
   const allExpensesList = await db.select().from(expenses).orderBy(expenses.createdAt);
-  const allOrdersList = await db.query.orders.findMany({ with: { client: true }, orderBy: orders.createdAt });
-
-  // Group revenue by month
-  const monthlyData: Record<string, { revenue: number; expenses: number; orders: number }> = {};
-  
-  allCashLogs.forEach(log => {
-    const date = new Date(log.createdAt);
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-    if (!monthlyData[key]) monthlyData[key] = { revenue: 0, expenses: 0, orders: 0 };
-    
-    if (log.type === 'in') {
-      monthlyData[key].revenue += log.amount;
-    } else if (log.type === 'out') {
-      monthlyData[key].expenses += log.amount;
-    }
+  const allOrdersList = await db.query.orders.findMany({ 
+    where: sql`${orders.status} IN ('confirmed', 'delivered')`,
+    with: { client: true, items: { with: { product: true } } }, 
+    orderBy: orders.createdAt 
   });
 
+  const monthlyData: Record<string, { revenue: number; expenses: number; orders: number }> = {};
+  
+  // 1. Group Sales & COGS by month
   allOrdersList.forEach(order => {
     const date = new Date(order.createdAt);
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
     if (!monthlyData[key]) monthlyData[key] = { revenue: 0, expenses: 0, orders: 0 };
+    
+    monthlyData[key].revenue += order.totalAmount;
     monthlyData[key].orders += 1;
+
+    // Calculate COGS for this order
+    for (const item of order.items) {
+      const product = (item as any).product;
+      if (product) {
+        const costPerPiece = product.costPrice / (product.purchaseUnit === 'carton' ? product.piecesPerBox : 1);
+        monthlyData[key].expenses += (item.quantity * costPerPiece);
+      }
+    }
+  });
+
+  // 2. Add Operating Expenses to each month
+  allExpensesList.forEach(exp => {
+    const date = new Date(exp.createdAt);
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    if (!monthlyData[key]) monthlyData[key] = { revenue: 0, expenses: 0, orders: 0 };
+    monthlyData[key].expenses += exp.amount;
   });
 
   const monthlyChart = Object.entries(monthlyData)
@@ -693,6 +748,7 @@ app.get('/api/admin/analytics', authenticate, requireAdmin, asyncHandler(async (
       ...data,
       profit: data.revenue - data.expenses,
     }));
+
 
   // Top selling products
   const allItems = await db.query.orderItems.findMany({ with: { product: true } });

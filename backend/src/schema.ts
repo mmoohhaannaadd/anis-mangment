@@ -80,7 +80,9 @@ export const expenses = sqliteTable('expenses', {
 export const partners = sqliteTable('partners', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull(),
+  payoutType: text('payout_type').notNull().default('percentage'), // 'percentage' | 'fixed'
   sharePercentage: real('share_percentage').notNull(),
+  fixedAmount: real('fixed_amount').notNull().default(0),
   totalReceived: real('total_received').notNull().default(0),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 });
