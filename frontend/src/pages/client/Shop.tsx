@@ -5,7 +5,7 @@ import { useCurrency } from '@/contexts/SettingsContext';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ShoppingCart, Package, Search } from 'lucide-react';
+import { ShoppingCart, Package, Search, Plus, Minus } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function Shop() {
@@ -15,6 +15,7 @@ export default function Shop() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [quantities, setQuantities] = useState<Record<number, number>>({});
 
   useEffect(() => {
     fetch('/api/client/products', { headers: { Authorization: `Bearer ${token}` } })
@@ -24,7 +25,18 @@ export default function Shop() {
   }, [token]);
 
   const handleAddToCart = (product: Product) => {
-    addToCart(product, 1);
+    const qty = quantities[product.id] || (product.unit === 'kg' || product.unit === 'كغ' ? 0.25 : 1);
+    addToCart(product, qty);
+    // Reset quantity after adding
+    setQuantities(prev => ({ ...prev, [product.id]: product.unit === 'kg' || product.unit === 'كغ' ? 0.25 : 1 }));
+  };
+
+  const updateQuantity = (id: number, delta: number, isKg: boolean) => {
+    setQuantities(prev => {
+      const current = prev[id] || (isKg ? 0.25 : 1);
+      const next = Math.max(isKg ? 0.25 : 1, current + delta);
+      return { ...prev, [id]: next };
+    });
   };
 
   const filteredProducts = products.filter(p =>
@@ -63,6 +75,8 @@ export default function Shop() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filteredProducts.map((p, i) => {
             const inCart = items.find(item => item.product.id === p.id);
+            const isKg = p.unit === 'kg' || p.unit === 'كغ';
+            const qty = quantities[p.id] || (isKg ? 0.25 : 1);
 
             return (
               <motion.div key={p.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.05 }}>
@@ -82,12 +96,23 @@ export default function Shop() {
                         <span className="text-slate-500">سعر الوحدة</span>
                         <span className="font-bold text-primary">{p.sellPrice} {currency}</span>
                       </div>
+                      <div className="flex items-center justify-between gap-2 pt-2">
+                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => updateQuantity(p.id, isKg ? -0.25 : -1, isKg)}><Minus className="h-4 w-4" /></Button>
+                        <input 
+                          type="number" 
+                          value={qty} 
+                          step={isKg ? "0.25" : "1"}
+                          onChange={(e) => setQuantities(prev => ({ ...prev, [p.id]: parseFloat(e.target.value) || 0 }))}
+                          className="w-20 text-center border rounded-md p-1"
+                        />
+                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => updateQuantity(p.id, isKg ? 0.25 : 1, isKg)}><Plus className="h-4 w-4" /></Button>
+                      </div>
                     </div>
                     {inCart ? (
                       <div className="flex items-center justify-between text-sm bg-blue-50 p-2 rounded-lg border border-blue-100">
                         <span className="text-blue-700 font-medium">في السلة ({inCart.quantity})</span>
                         <Button variant="outline" size="sm" onClick={() => handleAddToCart(p)}>
-                          + إضافة المزيد
+                          + إضافة
                         </Button>
                       </div>
                     ) : (

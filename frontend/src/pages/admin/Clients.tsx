@@ -18,8 +18,10 @@ export default function AdminClients() {
   const currency = useCurrency();
   const [clients, setClients] = useState<ClientRecord[]>([]);
   const [selectedClient, setSelectedClient] = useState<ClientRecord | null>(null);
-  const [paymentAmount, setPaymentAmount] = useState('');
-  const [paymentNotes, setPaymentNotes] = useState('');
+  const [selectedDebtClient, setSelectedDebtClient] = useState<ClientRecord | null>(null);
+  const [amount, setAmount] = useState('');
+  const [notes, setNotes] = useState('');
+  const [requestLoading, setRequestLoading] = useState(false);
   const [search, setSearch] = useState('');
 
   // Add client
@@ -40,18 +42,27 @@ export default function AdminClients() {
     fetchClients(); 
   }, []);
 
-  const handlePayment = async () => {
-    if (!selectedClient || !paymentAmount) return;
+  const handleTransaction = async (type: 'payment' | 'order') => {
+    const target = type === 'payment' ? selectedClient : selectedDebtClient;
+    if (!target || !amount) return;
+    setRequestLoading(true);
     const token = localStorage.getItem('token');
-    await fetch('/api/admin/transactions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ clientId: selectedClient.id, amount: Number(paymentAmount), notes: paymentNotes })
-    });
-    setSelectedClient(null);
-    setPaymentAmount('');
-    setPaymentNotes('');
-    fetchClients();
+    try {
+      await fetch('/api/admin/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ clientId: target.id, amount: Number(amount), notes, type })
+      });
+      setSelectedClient(null);
+      setSelectedDebtClient(null);
+      setAmount('');
+      setNotes('');
+      fetchClients();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setRequestLoading(false);
+    }
   };
 
   const handleAddClient = async (e: React.FormEvent) => {
@@ -158,13 +169,24 @@ export default function AdminClients() {
                 <span className="text-sm">{client.totalDebt > 0 ? 'المتبقي عليه (الذمة)' : 'الرصيد الحالي'}</span>
                 <strong className="text-xl">{client.totalDebt} {currency}</strong>
               </div>
-              <Button 
-                variant="outline" 
-                className="w-full border-blue-200 text-blue-700 hover:bg-blue-50 mt-2"
-                onClick={() => setSelectedClient(client)}
-              >
-                تسجيل دفعة نقدية
-              </Button>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                  onClick={() => setSelectedClient(client)}
+                >
+                  تحصيل دفعة
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="border-orange-200 text-orange-700 hover:bg-orange-50"
+                  onClick={() => setSelectedDebtClient(client)}
+                >
+                  إضافة دين سابق
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ))}
@@ -176,38 +198,49 @@ export default function AdminClients() {
         )}
       </div>
 
-      {/* Payment Modal */}
-      {selectedClient && (
+      {/* Transaction Modal (Payment or Debt) */}
+      {(selectedClient || selectedDebtClient) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <Card className="w-full max-w-md shadow-xl border-blue-200 animate-in fade-in zoom-in-95">
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>قبض دفعة من: {selectedClient.name}</CardTitle>
-              <Button variant="ghost" size="icon" onClick={() => setSelectedClient(null)}><X className="h-4 w-4" /></Button>
+              <CardTitle>
+                {selectedClient ? `تحصيل دفعة من: ${selectedClient.name}` : `إضافة دين سابق لـ: ${selectedDebtClient?.name}`}
+              </CardTitle>
+              <Button variant="ghost" size="icon" onClick={() => { setSelectedClient(null); setSelectedDebtClient(null); }}><X className="h-4 w-4" /></Button>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="p-3 bg-red-50 rounded text-red-900 border border-red-100 flex justify-between">
-                <span>المتبقي (الذمة الحالية):</span>
-                <strong className="text-lg">{selectedClient.totalDebt} {currency}</strong>
+                <span>المتبقي حالياً (الذمة):</span>
+                <strong className="text-lg">
+                  {(selectedClient || selectedDebtClient)?.totalDebt} {currency}
+                </strong>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">المبلغ المدفوع</label>
+                <label className="text-sm font-medium">المبلغ ({currency})</label>
                 <Input 
                   inputMode="decimal" 
-                  value={paymentAmount} 
+                  value={amount} 
+                  autoFocus
                   onChange={e => {
                     const val = e.target.value;
-                    if (val === '' || /^\d*\.?\d*$/.test(val)) setPaymentAmount(val);
+                    if (val === '' || /^\d*\.?\d*$/.test(val)) setAmount(val);
                   }} 
                   placeholder="0.00" 
                 />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">ملاحظات (اختياري)</label>
-                <Input type="text" value={paymentNotes} onChange={e => setPaymentNotes(e.target.value)} placeholder="مثال: دفعة من حساب الشهر الماضي" />
+                <Input type="text" value={notes} onChange={e => setNotes(e.target.value)} placeholder={selectedClient ? "مثال: رصيد نقدي" : "مثال: مبيعات سابقة يدوية"} />
               </div>
               <div className="flex justify-end gap-2 pt-4">
-                <Button variant="outline" onClick={() => setSelectedClient(null)}>إلغاء</Button>
-                <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handlePayment}>تسجيل وإيداع في الصندوق</Button>
+                <Button variant="outline" onClick={() => { setSelectedClient(null); setSelectedDebtClient(null); }}>إلغاء</Button>
+                <Button 
+                  className={selectedClient ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-orange-600 hover:bg-orange-700 text-white"} 
+                  disabled={requestLoading}
+                  onClick={() => handleTransaction(selectedClient ? 'payment' : 'order')}
+                >
+                  {requestLoading ? 'جاري التسجيل...' : (selectedClient ? 'تسجيل القبض' : 'تسجيل الدين')}
+                </Button>
               </div>
             </CardContent>
           </Card>

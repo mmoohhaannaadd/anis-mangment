@@ -202,31 +202,31 @@ export default function Inventory() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-2 mt-2">
+                    <div className="space-y-2 mt-2">
                     <div className="flex justify-between text-sm">
-                      <span className="text-slate-500">كمية المخزون (قطعة)</span>
+                      <span className="text-slate-500">كمية المخزون ({unitLabels[p.unit] || p.unit})</span>
                       <span className={`font-bold ${p.stockQuantity < 10 ? 'text-red-600' : 'text-slate-900'}`}>
                         {p.stockQuantity}
                         {p.purchaseUnit === 'carton' && p.piecesPerBox > 1 && (
                           <span className="text-xs font-normal text-slate-400 mr-1">
-                            ({(p.stockQuantity / p.piecesPerBox).toFixed(1)} كرتونة)
+                            ({(p.stockQuantity / p.piecesPerBox).toFixed(1)} {p.unit === 'kg' || p.unit === 'كغ' ? 'عبوة' : 'كرتونة'})
                           </span>
                         )}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-500">
-                        سعر التكلفة {p.purchaseUnit === 'carton' ? '(كرتونة)' : ''}
+                        سعر التكلفة {p.purchaseUnit === 'carton' ? `(لكل ${p.unit === 'kg' || p.unit === 'كغ' ? 'عبوة' : 'كرتونة'})` : ''}
                       </span>
                       <span className="font-medium text-slate-900">{p.costPrice} {currency}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-slate-500">سعر البيع (قطعة)</span>
+                      <span className="text-slate-500">سعر البيع (لكل {unitLabels[p.unit] || p.unit})</span>
                       <span className="font-bold text-primary">{p.sellPrice} {currency}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-500">
-                        هامش الربح {p.purchaseUnit === 'carton' ? '(لكل كرتونة)' : ''}
+                        هامش الربح {p.purchaseUnit === 'carton' ? `(لكل ${p.unit === 'kg' || p.unit === 'كغ' ? 'عبوة' : 'كرتونة'})` : ''}
                       </span>
                       <span className="font-bold text-emerald-600">
                         {((p.sellPrice * (p.piecesPerBox || 1)) - p.costPrice).toFixed(2)} {currency}
@@ -234,7 +234,7 @@ export default function Inventory() {
                     </div>
                     {p.purchaseUnit === 'carton' && p.piecesPerBox > 1 && (
                       <div className="flex justify-between text-xs text-emerald-500">
-                        <span>هامش الربح لكل قطعة</span>
+                        <span>هامش الربح {p.unit === 'kg' || p.unit === 'كغ' ? 'للكيلو الواحد' : 'للقطعة الواحدة'}</span>
                         <span className="font-medium">
                           {(p.sellPrice - (p.costPrice / p.piecesPerBox)).toFixed(2)} {currency}
                         </span>
@@ -249,7 +249,7 @@ export default function Inventory() {
                       onClick={() => { setRestockProduct(p); setRestockQty(''); }}
                     >
                       <PackagePlus className="h-3.5 w-3.5" />
-                      {p.purchaseUnit === 'carton' ? 'تعبئة (كرتون)' : 'تعبئة'}
+                      {p.purchaseUnit === 'carton' ? `تعبئة (${p.unit === 'kg' || p.unit === 'كغ' ? 'عبوات' : 'كرتون'})` : 'تعبئة'}
                     </Button>
                     <Button
                       variant="outline"
@@ -347,11 +347,11 @@ export default function Inventory() {
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">
-                      {form.purchaseUnit === 'carton' ? 'كمية (كرتونات)' : 'الكمية الأولية (قطع)'}
+                      {form.purchaseUnit === 'carton' ? `كمية (${form.unit === 'kg' || form.unit === 'كغ' ? 'عبوات' : 'كرتونات'})` : `الكمية (${unitLabels[form.unit] || form.unit})`}
                     </label>
-                    <Input inputMode="numeric" required value={form.stockQuantity} onChange={e => {
+                    <Input inputMode="decimal" required value={form.stockQuantity} onChange={e => {
                       const val = e.target.value;
-                      if (val === '' || /^\d*$/.test(val)) setForm({ ...form, stockQuantity: val });
+                      if (val === '' || /^\d*\.?\d*$/.test(val)) setForm({ ...form, stockQuantity: val });
                     }} />
                   </div>
                 </div>
@@ -359,7 +359,7 @@ export default function Inventory() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">
-                      سعر التكلفة {form.purchaseUnit === 'carton' ? '(للكرتونة)' : '(للقطعة)'}
+                      سعر التكلفة {form.purchaseUnit === 'carton' ? `(لكل ${form.unit === 'kg' || form.unit === 'كغ' ? 'عبوة' : 'كرتونة'})` : `(لكل ${unitLabels[form.unit] || form.unit})`}
                     </label>
                     <Input inputMode="decimal" required value={form.costPrice} onChange={e => {
                       const val = e.target.value;
@@ -367,7 +367,7 @@ export default function Inventory() {
                     }} />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">سعر البيع (للقطعة)</label>
+                    <label className="text-sm font-medium">سعر البيع (لكل {unitLabels[form.unit] || form.unit})</label>
                     <Input inputMode="decimal" required value={form.sellPrice} onChange={e => {
                       const val = e.target.value;
                       if (val === '' || /^\d*\.?\d*$/.test(val)) setForm({ ...form, sellPrice: val });
@@ -381,7 +381,7 @@ export default function Inventory() {
                   return preview && (
                     <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 text-sm space-y-1">
                       {preview.isCarton && (
-                        <p>📦 <span className="text-slate-600">ستُضاف:</span> <strong className="text-blue-700">{preview.pieces} قطعة</strong> ({form.stockQuantity} كرتونة × {form.piecesPerBox} قطعة)</p>
+                        <p>📦 <span className="text-slate-600">ستُضاف:</span> <strong className="text-blue-700">{preview.pieces} {unitLabels[form.unit] || form.unit}</strong> ({form.stockQuantity} × {form.piecesPerBox})</p>
                       )}
                       {preview.cost > 0 && !form.isInitialStock && (
                         <p>💰 <span className="text-slate-600">التكلفة الإجمالية:</span> <strong className="text-red-600">{preview.cost.toFixed(2)} {currency}</strong></p>
@@ -529,17 +529,17 @@ export default function Inventory() {
               <div className="space-y-2">
                 <label className="text-sm font-medium">
                   {restockProduct.purchaseUnit === 'carton'
-                    ? `عدد الكرتونات المضافة (${restockProduct.piecesPerBox} قطعة/كرتونة)`
-                    : 'الكمية المضافة (قطعة)'}
+                    ? `عدد ${restockProduct.unit === 'kg' || restockProduct.unit === 'كغ' ? 'العبوات' : 'الكرتونات'} المضافة (${restockProduct.piecesPerBox} ${unitLabels[restockProduct.unit] || restockProduct.unit} للواحدة)`
+                    : `الكمية المضافة (${unitLabels[restockProduct.unit] || restockProduct.unit})`}
                 </label>
                 <Input
-                  inputMode="numeric"
+                  inputMode="decimal"
                   value={restockQty}
                   onChange={e => {
                     const val = e.target.value;
-                    if (val === '' || /^\d*$/.test(val)) setRestockQty(val);
+                    if (val === '' || /^\d*\.?\d*$/.test(val)) setRestockQty(val);
                   }}
-                  placeholder={restockProduct.purchaseUnit === 'carton' ? 'عدد الكرتونات...' : 'عدد القطع...'}
+                  placeholder={restockProduct.purchaseUnit === 'carton' ? 'العدد...' : 'الكمية...'}
                 />
               </div>
 
@@ -548,10 +548,10 @@ export default function Inventory() {
                 return preview && (
                   <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 text-sm space-y-1">
                     {preview.isCarton && (
-                      <p>📦 ستُضاف: <strong className="text-blue-700">{preview.pieces} قطعة</strong> ({restockQty} كرتونة × {restockProduct.piecesPerBox})</p>
+                      <p>📦 ستُضاف: <strong className="text-blue-700">{preview.pieces} {unitLabels[restockProduct.unit] || restockProduct.unit}</strong> ({restockQty} × {restockProduct.piecesPerBox})</p>
                     )}
                     {!preview.isCarton && (
-                      <p>✅ ستُضاف: <strong className="text-blue-700">{restockQty} قطعة</strong></p>
+                      <p>✅ ستُضاف: <strong className="text-blue-700">{restockQty} {unitLabels[restockProduct.unit] || restockProduct.unit}</strong></p>
                     )}
                     {!isRestockInitial && (
                       <>

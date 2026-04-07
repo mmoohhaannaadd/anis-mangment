@@ -547,21 +547,26 @@ app.delete('/api/admin/clients/:id', authenticate, requireAdmin, asyncHandler(as
 }));
 
 app.post('/api/admin/transactions', authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  const { clientId, amount, notes } = req.body;
+  const { clientId, amount, notes, type } = req.body;
   const numAmount = Number(amount);
+  const txType = type || 'payment'; // default to payment
+  
   if (isNaN(numAmount) || numAmount <= 0) { res.status(400).json({ error: 'مبلغ غير صالح' }); return; }
 
   const tx = await db.insert(transactions).values({ 
-    clientId, type: 'payment', amount: numAmount, notes 
+    clientId, type: txType, amount: numAmount, notes 
   }).returning();
   
-  await db.insert(cashLog).values({
-    type: 'in',
-    amount: numAmount,
-    referenceType: 'payment',
-    referenceId: tx[0].id,
-    notes: `دفعة من العميل #${clientId} - ${notes || ''}`
-  });
+  // Only payments add to the cash box (In)
+  if (txType === 'payment') {
+    await db.insert(cashLog).values({
+      type: 'in',
+      amount: numAmount,
+      referenceType: 'payment',
+      referenceId: tx[0].id,
+      notes: `دفعة من العميل #${clientId} - ${notes || ''}`
+    });
+  }
 
   res.json(tx[0]);
 }));

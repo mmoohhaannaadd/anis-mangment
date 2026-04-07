@@ -76,22 +76,27 @@ export default function DirectSale() {
   }, [cart, setCartCount]);
 
   const addToCart = (product: Product) => {
+    const isKg = product.unit === 'kg' || product.unit === 'كغ';
+    const step = isKg ? 0.25 : 1;
+    
     setCart(prev => {
       const existing = prev.find(item => item.id === product.id);
       if (existing) {
         if (existing.quantity >= product.stockQuantity) return prev;
         return prev.map(item => 
-          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+          item.id === product.id ? { ...item, quantity: Math.min(item.quantity + step, item.stockQuantity) } : item
         );
       }
-      return [...prev, { ...product, quantity: 1, customUnitPrice: product.sellPrice }];
+      return [...prev, { ...product, quantity: step, customUnitPrice: product.sellPrice }];
     });
   };
 
   const updateQuantity = (id: number, delta: number) => {
     setCart(prev => prev.map(item => {
       if (item.id === id) {
-        const newQty = Math.max(1, Math.min(item.quantity + delta, item.stockQuantity));
+        const isKg = item.unit === 'kg' || item.unit === 'كغ';
+        const minQty = isKg ? 0.25 : 1;
+        const newQty = Math.max(minQty, Math.min(item.quantity + delta, item.stockQuantity));
         return { ...item, quantity: newQty };
       }
       return item;
@@ -270,12 +275,21 @@ export default function DirectSale() {
                       </div>
 
                       {/* Quantity Controls */}
-                      <div className="flex items-center gap-2 bg-slate-100 rounded-md shrink-0">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-600" onClick={() => updateQuantity(item.id, 1)}>
+                      <div className="flex items-center gap-1 bg-slate-100 rounded-md shrink-0">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-600" onClick={() => updateQuantity(item.id, item.unit === 'kg' || item.unit === 'كغ' ? 0.25 : 1)}>
                           <Plus className="h-3 w-3" />
                         </Button>
-                        <span className="w-8 text-center text-sm font-medium">{item.quantity}</span>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-600" onClick={() => updateQuantity(item.id, -1)}>
+                        <input 
+                          type="number"
+                          className="w-12 text-center text-sm font-bold bg-transparent border-none focus:ring-0 p-0"
+                          value={item.quantity}
+                          step={item.unit === 'kg' || item.unit === 'كغ' ? "0.25" : "1"}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0;
+                            setCart(prev => prev.map(i => i.id === item.id ? { ...i, quantity: Math.min(val, item.stockQuantity) } : i));
+                          }}
+                        />
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-600" onClick={() => updateQuantity(item.id, item.unit === 'kg' || item.unit === 'كغ' ? -0.25 : -1)}>
                           <Minus className="h-3 w-3" />
                         </Button>
                       </div>
