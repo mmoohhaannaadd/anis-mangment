@@ -17,6 +17,7 @@ import {
   Menu
 } from 'lucide-react';
 import { useState } from 'react';
+import { motion } from 'framer-motion';
 
 const navItems = [
   { href: '/admin/home', icon: Home, label: 'الصفحة الرئيسية' },
@@ -117,10 +118,51 @@ export default function AdminLayout() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 lg:p-8">
+        <main className="flex-1 overflow-y-auto p-4 lg:p-8 pb-24 lg:pb-8">
           <Outlet />
         </main>
       </div>
+
+      {/* Bottom Navigation for Mobile */}
+      <nav className="fixed bottom-0 left-0 right-0 z-[100] flex h-16 items-center justify-around border-t bg-white/95 backdrop-blur-sm px-2 shadow-[0_-4px_12px_rgba(0,0,0,0.1)] lg:hidden">
+        {[
+          { href: '/admin/home', icon: Home, label: 'الرئيسية' },
+          { href: '/admin/direct-sale', icon: Store, label: 'بيع مباشر' },
+          { href: '/admin/clients', icon: Users, label: 'العملاء' },
+          { href: '/admin/settings', icon: Settings, label: 'إعدادات' },
+        ].map((item) => {
+          const Icon = item.icon;
+          const isActive = location.pathname.startsWith(item.href);
+          return (
+            <Link
+              key={item.href}
+              to={item.href}
+              className={cn(
+                "flex flex-col items-center justify-center gap-1 rounded-2xl px-2 py-1 transition-all duration-300 min-w-[70px]",
+                isActive
+                  ? "text-primary"
+                  : "text-slate-400 hover:text-slate-600"
+              )}
+            >
+              <div className={cn(
+                "p-2 rounded-xl transition-all duration-300",
+                isActive ? "bg-primary/10" : ""
+              )}>
+                <Icon className={cn("h-5 w-5", isActive ? "stroke-[2.5px]" : "stroke-[1.5px]")} />
+              </div>
+              <span className={cn("text-[9px] font-bold uppercase tracking-tight", isActive ? "opacity-100" : "opacity-60")}>
+                {item.label}
+              </span>
+              {isActive && (
+                <motion.div 
+                  layoutId="activeTab"
+                  className="absolute -bottom-1 w-1 h-1 rounded-full bg-primary"
+                />
+              )}
+            </Link>
+          );
+        })}
+      </nav>
     </div>
   );
 }
