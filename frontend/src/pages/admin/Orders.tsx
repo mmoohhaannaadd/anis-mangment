@@ -260,13 +260,15 @@ export default function AdminOrders() {
                         <td className="p-3 text-center">
                           {isEditingMode ? (
                             <Input 
-                              type="number" 
-                              min="1" 
+                              inputMode="numeric"
                               className="w-16 h-8 text-center px-1 inline-block" 
                               value={item.quantity} 
                               onChange={(e) => {
-                                const newQty = parseInt(e.target.value) || 1;
-                                setEditingOrderItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: newQty, subtotal: newQty * i.unitPrice } : i));
+                                const val = e.target.value;
+                                if (val === '' || /^\d*$/.test(val)) {
+                                  const newQty = parseInt(val) || 0;
+                                  setEditingOrderItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: newQty, subtotal: newQty * i.unitPrice } : i));
+                                }
                               }}
                             />
                           ) : item.quantity}

@@ -105,7 +105,15 @@ export default function AdminCash() {
               <form onSubmit={handleAddDeposit} className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">المبلغ</label>
-                  <Input type="number" step="0.01" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} required />
+                  <Input 
+                    inputMode="decimal" 
+                    value={depositAmount} 
+                    onChange={e => {
+                      const val = e.target.value;
+                      if (val === '' || /^\d*\.?\d*$/.test(val)) setDepositAmount(val);
+                    }} 
+                    required 
+                  />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">البيان / الوصف</label>
@@ -126,7 +134,15 @@ export default function AdminCash() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">المبلغ</label>
-                  <Input type="number" step="0.01" value={expenseAmount} onChange={e => setExpenseAmount(e.target.value)} required />
+                  <Input 
+                    inputMode="decimal" 
+                    value={expenseAmount} 
+                    onChange={e => {
+                      const val = e.target.value;
+                      if (val === '' || /^\d*\.?\d*$/.test(val)) setExpenseAmount(val);
+                    }} 
+                    required 
+                  />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">التصنيف</label>

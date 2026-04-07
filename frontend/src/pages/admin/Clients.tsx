@@ -191,7 +191,15 @@ export default function AdminClients() {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">المبلغ المدفوع</label>
-                <Input type="number" step="0.01" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} placeholder="0.00" />
+                <Input 
+                  inputMode="decimal" 
+                  value={paymentAmount} 
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (val === '' || /^\d*\.?\d*$/.test(val)) setPaymentAmount(val);
+                  }} 
+                  placeholder="0.00" 
+                />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">ملاحظات (اختياري)</label>

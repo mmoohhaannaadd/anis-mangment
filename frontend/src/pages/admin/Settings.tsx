@@ -204,6 +204,7 @@ export default function SettingsPage() {
               <div className="space-y-2">
                 <label className="text-sm font-medium">رقم الهاتف</label>
                 <Input
+                  inputMode="tel"
                   value={storeSettings.phone}
                   onChange={e => setStoreSettings({ ...storeSettings, phone: e.target.value })}
                   placeholder="مثال: 07XXXXXXXX"
@@ -212,6 +213,7 @@ export default function SettingsPage() {
               <div className="space-y-2">
                 <label className="text-sm font-medium">رقم الواتساب</label>
                 <Input
+                  inputMode="tel"
                   value={storeSettings.whatsapp}
                   onChange={e => setStoreSettings({ ...storeSettings, whatsapp: e.target.value })}
                   placeholder="مثال: +9627XXXXXXXX"

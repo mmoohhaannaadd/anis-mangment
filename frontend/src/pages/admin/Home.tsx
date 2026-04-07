@@ -213,11 +213,15 @@ export default function AdminHome() {
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">المبلغ ({currency})</label>
                 <Input 
-                  type="number" 
-                  step="0.01" 
+                  inputMode="decimal"
                   placeholder="0.00" 
                   value={expenseAmount} 
-                  onChange={e => setExpenseAmount(e.target.value)} 
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                      setExpenseAmount(val);
+                    }
+                  }} 
                   required 
                   className="bg-slate-50 border-slate-200 focus:bg-white transition-all h-11 text-lg font-semibold"
                 />
@@ -420,13 +424,15 @@ export default function AdminHome() {
                         <td className="p-3 text-center">
                           {isEditingMode ? (
                             <Input 
-                              type="number" 
-                              min="1" 
+                              inputMode="numeric"
                               className="w-16 h-8 text-center px-1 inline-block border-slate-200" 
                               value={item.quantity} 
                               onChange={(e) => {
-                                const newQty = parseInt(e.target.value) || 1;
-                                setEditingOrderItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: newQty, subtotal: newQty * i.unitPrice } : i));
+                                const val = e.target.value;
+                                if (val === '' || /^\d*$/.test(val)) {
+                                  const newQty = parseInt(val) || 0;
+                                  setEditingOrderItems(prev => prev.map(i => i.id === item.id ? { ...i, quantity: newQty, subtotal: newQty * i.unitPrice } : i));
+                                }
                               }}
                             />
                           ) : <span className="font-bold text-slate-700">{item.quantity}</span>}

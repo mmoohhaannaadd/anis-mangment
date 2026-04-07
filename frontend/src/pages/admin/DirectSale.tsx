@@ -28,7 +28,7 @@ export default function DirectSale() {
   const [customerName, setCustomerName] = useState('');
   const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
   const [paidAmount, setPaidAmount] = useState<string>('');
-  const [discount, setDiscount] = useState<number>(0);
+  const [discount, setDiscount] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [clients, setClients] = useState<{ id: number, name: string, totalDebt: number }[]>([]);
@@ -105,7 +105,7 @@ export default function DirectSale() {
   };
 
   const subtotal = cart.reduce((acc, item) => acc + (item.quantity * item.customUnitPrice), 0);
-  const total = Math.max(0, subtotal - (discount || 0));
+  const total = Math.max(0, subtotal - (parseFloat(discount) || 0));
 
   const handleCheckout = async () => {
     if (cart.length === 0) return;
@@ -118,7 +118,7 @@ export default function DirectSale() {
           clientId: selectedClientId,
           customerName: customerName.trim() || undefined,
           paidAmount: Number(paidAmount) || 0,
-          discount: discount || 0,
+          discount: parseFloat(discount) || 0,
           items: cart.map(item => ({
             productId: item.id,
             quantity: item.quantity,
@@ -134,7 +134,7 @@ export default function DirectSale() {
       setCustomerName('');
       setSelectedClientId(null);
       setPaidAmount('');
-      setDiscount(0);
+      setDiscount('');
       fetchProducts(); // Refresh stock
       fetchClients(); // Refresh debt
       setTimeout(() => setSuccess(false), 3000);
@@ -238,11 +238,14 @@ export default function DirectSale() {
                       <div className="flex bg-white items-center gap-2 flex-1">
                         <Label className="text-xs text-slate-500 shrink-0">السعر:</Label>
                         <Input 
-                          type="number" 
+                          inputMode="decimal"
                           className="h-8 text-xs text-left" 
                           dir="ltr"
                           value={item.customUnitPrice || ''} 
-                          onChange={(e) => updatePrice(item.id, parseFloat(e.target.value) || 0)}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '' || /^\d*\.?\d*$/.test(val)) updatePrice(item.id, parseFloat(val) || 0);
+                          }}
                         />
                       </div>
 
@@ -307,24 +310,30 @@ export default function DirectSale() {
                 <div>
                   <Label className="text-xs text-slate-500 mb-1 block">المبلغ المقبوض ({currency})</Label>
                   <Input 
-                    type="number" 
+                    inputMode="decimal"
                     placeholder="0" 
                     className="h-8 text-sm text-left font-bold text-green-600"
                     dir="ltr"
                     value={paidAmount}
-                    onChange={(e) => setPaidAmount(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '' || /^\d*\.?\d*$/.test(val)) setPaidAmount(val);
+                    }}
                   />
                   <p className="text-[10px] text-slate-400 mt-1">اترك 0 إذا كان الطلب ديناً كاملاً.</p>
                 </div>
                 <div>
                   <Label className="text-xs text-slate-500 mb-1 block">خصم إضافي إجمالي ({currency})</Label>
                   <Input 
-                    type="number" 
+                    inputMode="decimal"
                     placeholder="0" 
                     className="h-8 text-sm text-left"
                     dir="ltr"
-                    value={discount || ''}
-                    onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
+                    value={discount}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '' || /^\d*\.?\d*$/.test(val)) setDiscount(val);
+                    }}
                   />
                 </div>
               </div>
@@ -334,10 +343,10 @@ export default function DirectSale() {
                   <span>المجموع الفرعي</span>
                   <span>{subtotal.toFixed(2)} {currency}</span>
                 </div>
-                {discount > 0 && (
+                {parseFloat(discount) > 0 && (
                   <div className="flex justify-between items-center text-sm text-red-500 mb-2">
                     <span>الخصم</span>
-                    <span>- {discount.toFixed(2)} {currency}</span>
+                    <span>- {parseFloat(discount).toFixed(2)} {currency}</span>
                   </div>
                 )}
                 <div className="flex justify-between items-center font-bold text-lg text-slate-900 mt-2">

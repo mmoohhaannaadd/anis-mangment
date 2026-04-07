@@ -181,12 +181,18 @@ export default function AdminPartners() {
                 {newPayoutType === 'percentage' ? (
                   <div className="space-y-2">
                     <label className="text-sm font-medium">نسبة الشراكة (%)</label>
-                    <Input type="number" step="0.01" min="0" max="100" placeholder="مثال: 50" value={newPartnerShare} onChange={e => setNewPartnerShare(e.target.value)} required />
+                    <Input inputMode="decimal" placeholder="مثال: 50" value={newPartnerShare} onChange={e => {
+                      const val = e.target.value;
+                      if (val === '' || /^\d*\.?\d*$/.test(val)) setNewPartnerShare(val);
+                    }} required />
                   </div>
                 ) : (
                   <div className="space-y-2">
                     <label className="text-sm font-medium">المبلغ الثابت</label>
-                    <Input type="number" step="0.01" min="0" placeholder="مثال: 1000" value={newFixedAmount} onChange={e => setNewFixedAmount(e.target.value)} required />
+                    <Input inputMode="decimal" placeholder="مثال: 1000" value={newFixedAmount} onChange={e => {
+                      const val = e.target.value;
+                      if (val === '' || /^\d*\.?\d*$/.test(val)) setNewFixedAmount(val);
+                    }} required />
                   </div>
                 )}
                 <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white">إضافة شريك</Button>
@@ -287,12 +293,18 @@ export default function AdminPartners() {
                 {editPayoutType === 'percentage' ? (
                   <div className="space-y-2">
                     <label className="text-sm font-medium">نسبة الشراكة (%)</label>
-                    <Input type="number" step="0.01" min="0" max="100" required value={editShare} onChange={e => setEditShare(e.target.value)} />
+                    <Input inputMode="decimal" required value={editShare} onChange={e => {
+                      const val = e.target.value;
+                      if (val === '' || /^\d*\.?\d*$/.test(val)) setEditShare(val);
+                    }} />
                   </div>
                 ) : (
                   <div className="space-y-2">
                     <label className="text-sm font-medium">المبلغ الثابت</label>
-                    <Input type="number" step="0.01" min="0" required value={editFixedAmount} onChange={e => setEditFixedAmount(e.target.value)} />
+                    <Input inputMode="decimal" required value={editFixedAmount} onChange={e => {
+                      const val = e.target.value;
+                      if (val === '' || /^\d*\.?\d*$/.test(val)) setEditFixedAmount(val);
+                    }} />
                   </div>
                 )}
                 <div className="flex justify-end gap-2 pt-2">
@@ -328,12 +340,13 @@ export default function AdminPartners() {
                       </div>
                       <div className="w-1/3 flex items-center gap-2">
                         <Input 
-                          type="number" 
-                          step="0.01" 
-                          min="0"
+                          inputMode="decimal" 
                           placeholder="المبلغ" 
                           value={manualDistributions[p.id] || ''} 
-                          onChange={(e) => setManualDistributions({ ...manualDistributions, [p.id]: e.target.value })} 
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '' || /^\d*\.?\d*$/.test(val)) setManualDistributions({ ...manualDistributions, [p.id]: val });
+                          }} 
                         />
                         <span className="text-sm font-bold text-slate-600">{currency}</span>
                       </div>

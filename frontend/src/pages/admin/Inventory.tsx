@@ -324,9 +324,12 @@ export default function Inventory() {
                   <div className="space-y-2 p-3 bg-amber-50 rounded-lg border border-amber-200">
                     <label className="text-sm font-medium text-amber-800">عدد القطع في الكرتونة الواحدة</label>
                     <Input
-                      type="number" min="1" required
+                      inputMode="numeric" required
                       value={form.piecesPerBox}
-                      onChange={e => setForm({ ...form, piecesPerBox: e.target.value })}
+                      onChange={e => {
+                        const val = e.target.value;
+                        if (val === '' || /^\d*$/.test(val)) setForm({ ...form, piecesPerBox: val });
+                      }}
                       placeholder="مثال: 15"
                     />
                     <p className="text-xs text-amber-600">مثال: إذا كل كرتونة تحتوي 15 قطعة → اكتب 15</p>
@@ -346,7 +349,10 @@ export default function Inventory() {
                     <label className="text-sm font-medium">
                       {form.purchaseUnit === 'carton' ? 'كمية (كرتونات)' : 'الكمية الأولية (قطع)'}
                     </label>
-                    <Input type="number" required min="0" value={form.stockQuantity} onChange={e => setForm({ ...form, stockQuantity: e.target.value })} />
+                    <Input inputMode="numeric" required value={form.stockQuantity} onChange={e => {
+                      const val = e.target.value;
+                      if (val === '' || /^\d*$/.test(val)) setForm({ ...form, stockQuantity: val });
+                    }} />
                   </div>
                 </div>
 
@@ -355,11 +361,17 @@ export default function Inventory() {
                     <label className="text-sm font-medium">
                       سعر التكلفة {form.purchaseUnit === 'carton' ? '(للكرتونة)' : '(للقطعة)'}
                     </label>
-                    <Input type="number" step="0.01" required min="0" value={form.costPrice} onChange={e => setForm({ ...form, costPrice: e.target.value })} />
+                    <Input inputMode="decimal" required value={form.costPrice} onChange={e => {
+                      const val = e.target.value;
+                      if (val === '' || /^\d*\.?\d*$/.test(val)) setForm({ ...form, costPrice: val });
+                    }} />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">سعر البيع (للقطعة)</label>
-                    <Input type="number" step="0.01" required min="0" value={form.sellPrice} onChange={e => setForm({ ...form, sellPrice: e.target.value })} />
+                    <Input inputMode="decimal" required value={form.sellPrice} onChange={e => {
+                      const val = e.target.value;
+                      if (val === '' || /^\d*\.?\d*$/.test(val)) setForm({ ...form, sellPrice: val });
+                    }} />
                   </div>
                 </div>
 
@@ -443,9 +455,12 @@ export default function Inventory() {
                   <div className="space-y-2 p-3 bg-amber-50 rounded-lg border border-amber-200">
                     <label className="text-sm font-medium text-amber-800">عدد القطع في الكرتونة</label>
                     <Input
-                      type="number" min="1" required
+                      inputMode="numeric" required
                       value={editForm.piecesPerBox}
-                      onChange={e => setEditForm({ ...editForm, piecesPerBox: e.target.value })}
+                      onChange={e => {
+                        const val = e.target.value;
+                        if (val === '' || /^\d*$/.test(val)) setEditForm({ ...editForm, piecesPerBox: val });
+                      }}
                       placeholder="مثال: 15"
                     />
                   </div>
@@ -464,11 +479,17 @@ export default function Inventory() {
                     <label className="text-sm font-medium">
                       سعر التكلفة {editForm.purchaseUnit === 'carton' ? '(كرتونة)' : '(قطعة)'}
                     </label>
-                    <Input type="number" step="0.01" required min="0" value={editForm.costPrice} onChange={e => setEditForm({ ...editForm, costPrice: e.target.value })} />
+                    <Input inputMode="decimal" required value={editForm.costPrice} onChange={e => {
+                      const val = e.target.value;
+                      if (val === '' || /^\d*\.?\d*$/.test(val)) setEditForm({ ...editForm, costPrice: val });
+                    }} />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">سعر البيع (قطعة)</label>
-                    <Input type="number" step="0.01" required min="0" value={editForm.sellPrice} onChange={e => setEditForm({ ...editForm, sellPrice: e.target.value })} />
+                    <Input inputMode="decimal" required value={editForm.sellPrice} onChange={e => {
+                      const val = e.target.value;
+                      if (val === '' || /^\d*\.?\d*$/.test(val)) setEditForm({ ...editForm, sellPrice: val });
+                    }} />
                   </div>
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
@@ -512,9 +533,12 @@ export default function Inventory() {
                     : 'الكمية المضافة (قطعة)'}
                 </label>
                 <Input
-                  type="number" min="1"
+                  inputMode="numeric"
                   value={restockQty}
-                  onChange={e => setRestockQty(e.target.value)}
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (val === '' || /^\d*$/.test(val)) setRestockQty(val);
+                  }}
                   placeholder={restockProduct.purchaseUnit === 'carton' ? 'عدد الكرتونات...' : 'عدد القطع...'}
                 />
               </div>
