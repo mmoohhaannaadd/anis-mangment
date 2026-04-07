@@ -59,16 +59,19 @@ export default function AdminOrders() {
   const updateStatus = async () => {
     if (!selectedOrder) return;
 
-    if (paidAmount !== '') {
-      const pAmt = Number(paidAmount);
-      if (isNaN(pAmt) || pAmt < 0) {
-        setPaymentError('لا يمكن إدخال مبلغ سالب');
-        return;
-      }
-      if (pAmt > selectedOrder.totalAmount) {
-        setPaymentError('المبلغ المدفوع لا يمكن أن يكون أكبر من إجمالي الطلب');
-        return;
-      }
+    if (paidAmount === '') {
+      setPaymentError('يجب إدخال المبلغ المدفوع (اكتب 0 في حال لم يتم القبض بعد)');
+      return;
+    }
+
+    const pAmt = Number(paidAmount);
+    if (isNaN(pAmt) || pAmt < 0) {
+      setPaymentError('لا يمكن إدخال مبلغ سالب');
+      return;
+    }
+    if (pAmt > selectedOrder.totalAmount) {
+      setPaymentError('المبلغ المدفوع لا يمكن أن يكون أكبر من إجمالي الطلب');
+      return;
     }
     
     setPaymentError('');
@@ -340,22 +343,23 @@ export default function AdminOrders() {
               )}
               
               <div className="space-y-2">
-                <label className="text-sm font-medium">المبلغ المدفوع (اختياري)</label>
+                <label className="text-sm font-medium">المبلغ القبوض فعلياً (شيكل)</label>
                 <Input 
-                  type="number" 
-                  min="0"
-                  max={selectedOrder.totalAmount}
-                  placeholder="أدخل المبلغ المقبوض من العميل..."
+                  inputMode="decimal"
+                  placeholder="أدخل المبلغ المقبوض..."
                   value={paidAmount}
                   onChange={(e) => {
-                    setPaidAmount(e.target.value);
-                    setPaymentError('');
+                    const val = e.target.value;
+                    if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                      setPaidAmount(val);
+                      setPaymentError('');
+                    }
                   }}
                   className={`border-slate-300 ${paymentError ? 'border-red-500' : ''}`}
                 />
-                {paymentError && <p className="text-xs text-red-500 mt-1 mb-1">{paymentError}</p>}
+                {paymentError && <p className="text-xs text-red-500 mt-1 mb-1 font-bold">{paymentError}</p>}
                 <p className="text-xs text-slate-500">
-                  اترك الحقل فارغاً أو اكتب 0 في حال لم يتم الدفع بعد (يُسجل كمديونية على حساب العميل).
+                  مطلوب* - اكتب 0 في حال لم يتم الدفع بعد (يُسجل كمديونية على حساب العميل).
                 </p>
               </div>
 

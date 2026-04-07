@@ -6,7 +6,7 @@ import bcrypt from 'bcryptjs';
 import { db } from './db';
 import { users, products, orders, orderItems, transactions, expenses, partners, cashLog, profitDistributions, settings } from './schema';
 import asyncHandler from 'express-async-handler';
-import { eq, sum, desc, and, gte, lte, like, sql } from 'drizzle-orm';
+import { eq, sum, desc, and, gte, lte, like, sql, not } from 'drizzle-orm';
 
 dotenv.config();
 
@@ -821,6 +821,35 @@ app.get('/api/client/balance', authenticate, asyncHandler(async (req: any, res) 
   const balance = totalPaid - totalOrdered;
   
   res.json({ balance, totalOrdered, totalPaid });
+}));
+
+app.post('/api/admin/reset-database', authenticate, requireAdmin, asyncHandler(async (req, res) => {
+  const alreadyReset = await db.query.settings.findFirst({ where: eq(settings.key, 'databaseResetPerformed') });
+  if (alreadyReset && alreadyReset.value === 'true') {
+    res.status(400).json({ error: 'لقد تم تصفير قاعدة البيانات مسبقاً' });
+    return;
+  }
+
+  // 1. Delete everything in reverse order of FKs
+  await db.delete(orderItems);
+  await db.delete(orders);
+  await db.delete(transactions);
+  await db.delete(expenses);
+  await db.delete(profitDistributions);
+  await db.delete(partners);
+  await db.delete(cashLog);
+  await db.delete(products);
+  // Delete users except admins
+  await db.delete(users).where(not(eq(users.role, 'admin')));
+
+  // Mark as reset
+  if (alreadyReset) {
+    await db.update(settings).set({ value: 'true' }).where(eq(settings.key, 'databaseResetPerformed'));
+  } else {
+    await db.insert(settings).values({ key: 'databaseResetPerformed', value: 'true' });
+  }
+
+  res.json({ message: 'تم تصفير قاعدة البيانات بنجاح' });
 }));
 
 const PORT = process.env.PORT || 5000;

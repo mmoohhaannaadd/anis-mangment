@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Settings as SettingsIcon, Save, Lock, Store, Check } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Lock, Store, Check, Trash2, AlertTriangle } from 'lucide-react';
 import { useSettings } from '@/contexts/SettingsContext';
 
 const CURRENCIES = [
@@ -31,6 +31,11 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordMsg, setPasswordMsg] = useState('');
   const [passwordError, setPasswordError] = useState(false);
+  
+  // Database Reset
+  const [resetConfirm, setResetConfirm] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetDone, setResetDone] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -46,6 +51,9 @@ export default function SettingsPage() {
           enableInitialStock: data.enableInitialStock !== false,
           enableDepositCash: data.enableDepositCash !== false,
         });
+        if (data.databaseResetPerformed === 'true') {
+          setResetDone(true);
+        }
       })
       .finally(() => setLoading(false));
   }, []);
@@ -98,6 +106,37 @@ export default function SettingsPage() {
     } else {
       setPasswordMsg(data.error || 'حدث خطأ');
       setPasswordError(true);
+    }
+  };
+  
+  const handleResetDatabase = async () => {
+    if (!resetConfirm) {
+      setResetConfirm(true);
+      return;
+    }
+    
+    setResetLoading(true);
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch('/api/admin/reset-database', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setResetDone(true);
+        alert('تم تصفير قاعدة البيانات بنجاح. سيتم الآن تسجيل الخروج.');
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      } else {
+        const data = await res.json();
+        alert(data.error || 'حدث خطأ');
+        if (data.error?.includes('مسبقاً')) setResetDone(true);
+      }
+    } catch (e) {
+      console.error(e);
+      alert('فشلت العملية');
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -275,6 +314,71 @@ export default function SettingsPage() {
                 <Lock className="h-4 w-4" /> تغيير كلمة المرور
               </Button>
             </form>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Dangerous Operations */}
+      <div className="pt-6 border-t mt-8">
+        <Card className="shadow-sm border-red-100 bg-red-50/5 overflow-hidden">
+          <CardHeader className="bg-red-50/50 pb-4">
+            <CardTitle className="text-lg flex items-center gap-2 text-red-700">
+              <AlertTriangle className="h-5 w-5" /> منطقة خطرة: تصفير الموقع (البيانات التجريبية)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6 space-y-4">
+            <div className="flex flex-col md:flex-row gap-6 items-start md:items-center justify-between">
+              <div className="space-y-1 flex-1">
+                <p className="text-slate-900 font-bold">حذف جميع البيانات والبدء من جديد</p>
+                <p className="text-sm text-slate-500 leading-relaxed">
+                  هذا الإجراء سوف يحذف جميع الطلبات، المنتجات، العملاء، الحركات المالية، المصاريف، والشركاء بشكل نهائي. 
+                  <br/>
+                  سوف يتم الإبقاء فقط على حسابات "المديرين" وإعدادات الموقع الأساسية.
+                </p>
+              </div>
+
+              <div className="w-full md:w-auto min-w-[240px]">
+                {resetDone ? (
+                  <div className="bg-slate-100 text-slate-500 px-6 py-4 rounded-xl text-center font-bold border border-slate-200">
+                    تم إجراء التصفير مسبقاً
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Button 
+                      type="button"
+                      variant={resetConfirm ? "destructive" : "outline"}
+                      onClick={handleResetDatabase}
+                      disabled={resetLoading}
+                      className={`w-full gap-2 h-12 text-base font-bold transition-all shadow-sm ${
+                        resetConfirm ? 'bg-red-600 hover:bg-red-700 animate-pulse' : 'border-red-200 text-red-600 hover:bg-red-50'
+                      }`}
+                    >
+                      {resetLoading ? 'جاري الحذف...' : (
+                        resetConfirm ? (
+                          <>هل أنت متأكد؟ اضغط ثانية للتأكيد النهائي</>
+                        ) : (
+                          <><Trash2 className="h-5 w-5" /> حذف السجلات التجريبية</>
+                        )
+                      )}
+                    </Button>
+                    {resetConfirm && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setResetConfirm(false)}
+                        className="w-full text-xs text-slate-400 hover:text-slate-600"
+                      >
+                        إلغاء العملية
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <p className="text-[10px] text-red-400 uppercase tracking-widest font-medium">
+              * ملاحظة: هذا الزر يعمل لمرة واحدة فقط عند تسليم الموقع للعميل.
+            </p>
           </CardContent>
         </Card>
       </div>
