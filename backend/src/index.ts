@@ -117,11 +117,14 @@ app.get('/api/admin/dashboard', authenticate, requireAdmin, asyncHandler(async (
   for (const order of validOrders) {
     totalSalesRevenue += order.totalAmount;
     for (const item of order.items) {
-      const product = (item as any).product;
-      if (product) {
-        const costPerPiece = product.costPrice / (product.purchaseUnit === 'carton' ? product.piecesPerBox : 1);
-        totalCOGS += item.quantity * costPerPiece;
+      let usedCost = Number(item.costPrice) || 0;
+      if (usedCost === 0) {
+        const product = (item as any).product;
+        if (product) {
+          usedCost = product.costPrice / (product.purchaseUnit === 'carton' ? product.piecesPerBox : 1);
+        }
       }
+      totalCOGS += item.quantity * usedCost;
     }
   }
 
@@ -427,19 +430,30 @@ app.post('/api/admin/direct-sale', authenticate, requireAdmin, asyncHandler(asyn
     const product = await db.query.products.findFirst({ where: eq(products.id, item.productId) });
     if (!product) continue;
     
+    const numQty = Number(item.quantity) || 0;
+    
     // check stock
-    if (product.stockQuantity < item.quantity) {
+    if (product.stockQuantity < numQty) {
       res.status(400).json({ error: `الكمية المتوفرة من ${product.name} لا تكفي (المتوفر: ${product.stockQuantity})` });
       return;
     }
 
     const priceToUse = item.unitPrice !== undefined ? Number(item.unitPrice) : product.sellPrice;
-    const subtotal = priceToUse * item.quantity;
+    const subtotal = priceToUse * numQty;
     totalAmount += subtotal;
-    dbItems.push({ productId: product.id, quantity: item.quantity, unitPrice: priceToUse, subtotal });
+    
+    const costPerUnit = product.costPrice / (product.purchaseUnit === 'carton' ? product.piecesPerBox : 1);
+    
+    dbItems.push({ 
+      productId: product.id, 
+      quantity: numQty, 
+      unitPrice: priceToUse, 
+      costPrice: costPerUnit, 
+      subtotal 
+    });
     
     // Deduct stock immediately!
-    await db.update(products).set({ stockQuantity: product.stockQuantity - item.quantity }).where(eq(products.id, product.id));
+    await db.update(products).set({ stockQuantity: Number(product.stockQuantity) - numQty }).where(eq(products.id, product.id));
   }
 
   const finalAmount = totalAmount - (Number(discount) || 0);
@@ -528,19 +542,25 @@ app.post('/api/admin/clients', authenticate, requireAdmin, asyncHandler(async (r
 app.delete('/api/admin/clients/:id', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const clientId = parseInt(req.params.id as string);
   
-  // 1. Delete all transactions for this client
+  // 1. Find all client transactions first to clean up cash log
+  const clientTx = await db.select().from(transactions).where(eq(transactions.clientId, clientId));
+  for (const tx of clientTx) {
+    await db.delete(cashLog).where(and(eq(cashLog.referenceType, 'payment'), eq(cashLog.referenceId, tx.id)));
+  }
+
+  // 2. Delete all transactions for this client
   await db.delete(transactions).where(eq(transactions.clientId, clientId));
   
-  // 2. Delete all order items for orders belonging to this client
+  // 3. Delete all order items for orders belonging to this client
   const clientOrders = await db.select().from(orders).where(eq(orders.clientId, clientId));
   for (const order of clientOrders) {
     await db.delete(orderItems).where(eq(orderItems.orderId, order.id));
   }
   
-  // 3. Delete all orders for this client
+  // 4. Delete all orders for this client
   await db.delete(orders).where(eq(orders.clientId, clientId));
   
-  // 4. Delete the client record
+  // 5. Delete the client record
   await db.delete(users).where(eq(users.id, clientId));
   
   res.json({ success: true, message: 'تم حذف العميل وجميع بياناته بنجاح' });
@@ -729,11 +749,15 @@ app.get('/api/admin/analytics', authenticate, requireAdmin, asyncHandler(async (
 
     // Calculate COGS for this order
     for (const item of order.items) {
+      // Priority: 1. Stored item.costPrice, 2. Dynamic calculated from current product
+      let usedCost = Number(item.costPrice) || 0;
       const product = (item as any).product;
-      if (product) {
-        const costPerPiece = product.costPrice / (product.purchaseUnit === 'carton' ? product.piecesPerBox : 1);
-        monthlyData[key].expenses += (item.quantity * costPerPiece);
+      
+      if (usedCost === 0 && product) {
+        usedCost = product.costPrice / (product.purchaseUnit === 'carton' ? product.piecesPerBox : 1);
       }
+      
+      monthlyData[key].expenses += (item.quantity * usedCost);
     }
   });
 
@@ -845,9 +869,23 @@ app.post('/api/client/orders', authenticate, asyncHandler(async (req: any, res) 
   for (const item of items) {
     const product = await db.query.products.findFirst({ where: eq(products.id, item.productId) });
     if (!product) continue;
-    const subtotal = product.sellPrice * item.quantity;
+    
+    // Check if product is available (optional check, but good)
+    if (product.stockQuantity < Number(item.quantity)) {
+      // We can allow pending orders for out of stock, but let's just log it or warn
+    }
+    
+    const costPerUnit = product.costPrice / (product.purchaseUnit === 'carton' ? product.piecesPerBox : 1);
+    const subtotal = product.sellPrice * Number(item.quantity);
     totalAmount += subtotal;
-    dbItems.push({ productId: product.id, quantity: item.quantity, unitPrice: product.sellPrice, subtotal });
+
+    dbItems.push({ 
+      productId: product.id, 
+      quantity: Number(item.quantity), 
+      unitPrice: product.sellPrice, 
+      costPrice: costPerUnit,
+      subtotal 
+    });
   }
 
   // create order

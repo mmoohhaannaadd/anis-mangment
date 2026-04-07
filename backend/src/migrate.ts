@@ -29,7 +29,7 @@ async function migrate() {
       unit TEXT NOT NULL DEFAULT 'piece',
       cost_price REAL NOT NULL,
       sell_price REAL NOT NULL,
-      stock_quantity INTEGER NOT NULL DEFAULT 0,
+      stock_quantity REAL NOT NULL DEFAULT 0,
       purchase_unit TEXT NOT NULL DEFAULT 'piece',
       pieces_per_box INTEGER NOT NULL DEFAULT 1,
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
@@ -48,10 +48,12 @@ async function migrate() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       order_id INTEGER NOT NULL REFERENCES orders(id),
       product_id INTEGER NOT NULL REFERENCES products(id),
-      quantity INTEGER NOT NULL,
+      quantity REAL NOT NULL,
       unit_price REAL NOT NULL,
+      cost_price REAL NOT NULL DEFAULT 0,
       subtotal REAL NOT NULL
     )`,
+    `ALTER TABLE order_items ADD COLUMN cost_price REAL NOT NULL DEFAULT 0`,
     `CREATE TABLE IF NOT EXISTS transactions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       client_id INTEGER NOT NULL REFERENCES users(id),
@@ -70,10 +72,15 @@ async function migrate() {
     `CREATE TABLE IF NOT EXISTS partners (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
+      payout_type TEXT NOT NULL DEFAULT 'percentage',
       share_percentage REAL NOT NULL,
+      fixed_amount REAL NOT NULL DEFAULT 0,
       total_received REAL NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     )`,
+    // Evolution columns for partners
+    `ALTER TABLE partners ADD COLUMN payout_type TEXT NOT NULL DEFAULT 'percentage'`,
+    `ALTER TABLE partners ADD COLUMN fixed_amount REAL NOT NULL DEFAULT 0`,
     `CREATE TABLE IF NOT EXISTS profit_distributions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       partner_id INTEGER NOT NULL REFERENCES partners(id),

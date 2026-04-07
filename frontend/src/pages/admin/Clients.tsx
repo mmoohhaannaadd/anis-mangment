@@ -67,16 +67,30 @@ export default function AdminClients() {
 
   const handleAddClient = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (requestLoading) return;
+    
+    setRequestLoading(true);
     const token = localStorage.getItem('token');
-    const res = await fetch('/api/admin/clients', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify(newClient),
-    });
-    if (res.ok) {
+    try {
+      const res = await fetch('/api/admin/clients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(newClient),
+      });
+      
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'حدث خطأ أثناء إضافة العميل');
+        return;
+      }
+
       setNewClient({ name: '', phone: '', password: '123456', whatsapp: '' });
       setShowAddClient(false);
       fetchClients();
+    } catch (err) {
+      alert('فشل الاتصال بالسيرفر، يرجى المحاولة لاحقاً');
+    } finally {
+      setRequestLoading(false);
     }
   };
 
@@ -274,8 +288,10 @@ export default function AdminClients() {
                   <Input value={newClient.whatsapp} onChange={e => setNewClient({ ...newClient, whatsapp: e.target.value })} placeholder="+9647XXXXXXXX" />
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
-                  <Button type="button" variant="outline" onClick={() => setShowAddClient(false)}>إلغاء</Button>
-                  <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white">إضافة العميل</Button>
+                  <Button type="button" variant="outline" onClick={() => setShowAddClient(false)} disabled={requestLoading}>إلغاء</Button>
+                  <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white" disabled={requestLoading}>
+                    {requestLoading ? 'جاري الإضافة...' : 'إضافة العميل'}
+                  </Button>
                 </div>
               </form>
             </CardContent>

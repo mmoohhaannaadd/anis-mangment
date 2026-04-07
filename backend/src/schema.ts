@@ -46,6 +46,7 @@ export const orderItems = sqliteTable('order_items', {
   productId: integer('product_id').notNull().references(() => products.id),
   quantity: real('quantity').notNull(),
   unitPrice: real('unit_price').notNull(),
+  costPrice: real('cost_price').notNull().default(0), // added to track historical profit
   subtotal: real('subtotal').notNull(),
 });
 

@@ -72,7 +72,7 @@ export default function DirectSale() {
 
   // Update global cart count for nav badge
   useEffect(() => {
-    setCartCount(cart.reduce((acc, item) => acc + item.quantity, 0));
+    setCartCount(cart.length);
   }, [cart, setCartCount]);
 
   const addToCart = (product: Product) => {
@@ -280,10 +280,10 @@ export default function DirectSale() {
                           <Plus className="h-3 w-3" />
                         </Button>
                         <input 
-                          type="number"
-                          className="w-12 text-center text-sm font-bold bg-transparent border-none focus:ring-0 p-0"
+                          inputMode="decimal"
+                          className="w-16 text-center text-sm font-bold bg-transparent border-none focus:ring-0 p-0"
                           value={item.quantity}
-                          step={item.unit === 'kg' || item.unit === 'كغ' ? "0.25" : "1"}
+                          step={item.unit === 'kg' || item.unit === 'كغ' ? "0.01" : "1"}
                           onChange={(e) => {
                             const val = parseFloat(e.target.value) || 0;
                             setCart(prev => prev.map(i => i.id === item.id ? { ...i, quantity: Math.min(val, item.stockQuantity) } : i));
