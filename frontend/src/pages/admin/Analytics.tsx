@@ -28,7 +28,8 @@ export default function Analytics() {
     const token = localStorage.getItem('token');
     fetch('/api/admin/analytics', { headers: { Authorization: `Bearer ${token}` } })
       .then(res => res.json())
-      .then(setData)
+      .then(d => { if (d && d.monthlyChart) setData(d); })
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 

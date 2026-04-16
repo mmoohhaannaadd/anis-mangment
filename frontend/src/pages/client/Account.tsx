@@ -20,13 +20,15 @@ export default function Account() {
   useEffect(() => {
     fetch('/api/client/balance', { headers: { Authorization: `Bearer ${token}` } })
       .then(res => res.json())
-      .then(setData)
+      .then(d => { if (d && typeof d.balance === 'number') setData(d); })
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, [token]);
 
   if (loading) return <div className="text-center p-12 text-slate-500">جاري التحميل...</div>;
+  if (!data) return <div className="text-center p-12 text-slate-500">تعذر تحميل بيانات الحساب. يرجى المحاولة لاحقاً.</div>;
 
-  const isDebt = data && data.balance < 0;
+  const isDebt = data.balance < 0;
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">

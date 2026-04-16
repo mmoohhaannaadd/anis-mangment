@@ -20,7 +20,8 @@ export default function Shop() {
   useEffect(() => {
     fetch('/api/client/products', { headers: { Authorization: `Bearer ${token}` } })
       .then(res => res.json())
-      .then(setProducts)
+      .then(data => { if (Array.isArray(data)) setProducts(data); })
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, [token]);
 

@@ -49,10 +49,15 @@ export default function AdminOrders() {
 
   const fetchOrders = async () => {
     const token = localStorage.getItem('token');
-    const res = await fetch('/api/admin/orders', {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    if (res.ok) setOrders(await res.json());
+    try {
+      const res = await fetch('/api/admin/orders', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) setOrders(data);
+      }
+    } catch {}
     setLoading(false);
   };
 
@@ -112,8 +117,8 @@ export default function AdminOrders() {
 
   const filteredOrders = orders.filter(o => {
     const matchSearch = search === '' || 
-      o.client.name.includes(search) || 
-      o.client.phone.includes(search) || 
+      (o.client?.name || '').includes(search) || 
+      (o.client?.phone || '').includes(search) || 
       String(o.id).includes(search);
     const matchStatus = filterStatus === 'all' || o.status === filterStatus;
     return matchSearch && matchStatus;
@@ -168,8 +173,8 @@ export default function AdminOrders() {
               </CardHeader>
               <CardContent className="space-y-2">
                 <div className="text-sm space-y-1">
-                  <p><strong>العميل:</strong> {order.client.name}</p>
-                  <p><strong>الهاتف:</strong> {order.client.phone}</p>
+                  <p><strong>العميل:</strong> {order.client?.name || 'غير معروف'}</p>
+                  <p><strong>الهاتف:</strong> {order.client?.phone || '-'}</p>
                   <p><strong>الإجمالي:</strong> <span className="text-lg font-bold text-blue-700">{order.totalAmount} {currency}</span></p>
                   <p className="text-slate-500"><strong>التاريخ:</strong> {new Date(order.createdAt).toLocaleDateString('ar-EG')} {new Date(order.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</p>
                 </div>
@@ -219,7 +224,7 @@ export default function AdminOrders() {
             <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
               <div>
                 <CardTitle className="text-lg">تفاصيل الطلب #{detailOrder.id}</CardTitle>
-                <p className="text-sm text-slate-500 mt-1">{detailOrder.client.name} - {detailOrder.client.phone}</p>
+                <p className="text-sm text-slate-500 mt-1">{detailOrder.client?.name || 'غير معروف'} - {detailOrder.client?.phone || '-'}</p>
               </div>
               <div className="flex items-center gap-2">
                 {!isEditingMode && detailOrder.status === 'pending' && (
@@ -327,7 +332,7 @@ export default function AdminOrders() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="p-3 bg-slate-50 rounded-lg border text-sm">
-                <p>العميل: <strong>{selectedOrder.client.name}</strong></p>
+                <p>العميل: <strong>{selectedOrder.client?.name || 'غير معروف'}</strong></p>
                 <p>إجمالي الطلب: <strong className="text-lg text-slate-900">{selectedOrder.totalAmount} {currency}</strong></p>
               </div>
 

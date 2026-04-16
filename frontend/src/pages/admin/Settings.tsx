@@ -40,21 +40,24 @@ export default function SettingsPage() {
   useEffect(() => {
     const token = localStorage.getItem('token');
     fetch('/api/admin/settings', { headers: { Authorization: `Bearer ${token}` } })
-      .then(res => res.json())
+      .then(res => res.ok ? res.json() : null)
       .then(data => {
-        setStoreSettings({
-          storeName: data.storeName || 'إدارة حلويات الأنيس',
-          currency: data.currency || '₪',
-          phone: data.phone || '',
-          address: data.address || '',
-          whatsapp: data.whatsapp || '',
-          enableInitialStock: data.enableInitialStock !== false,
-          enableDepositCash: data.enableDepositCash !== false,
-        });
-        if (data.databaseResetPerformed === 'true') {
-          setResetDone(true);
+        if (data && !data.error) {
+          setStoreSettings({
+            storeName: data.storeName || 'إدارة حلويات الأنيس',
+            currency: data.currency || '₪',
+            phone: data.phone || '',
+            address: data.address || '',
+            whatsapp: data.whatsapp || '',
+            enableInitialStock: data.enableInitialStock !== false,
+            enableDepositCash: data.enableDepositCash !== false,
+          });
+          if (data.databaseResetPerformed === 'true') {
+            setResetDone(true);
+          }
         }
       })
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 

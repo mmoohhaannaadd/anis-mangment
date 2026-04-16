@@ -44,8 +44,13 @@ export default function AdminPartners() {
 
   const fetchPartners = async () => {
     const token = localStorage.getItem('token');
-    const res = await fetch('/api/admin/partners', { headers: { Authorization: `Bearer ${token}` } });
-    if (res.ok) setPartners(await res.json());
+    try {
+      const res = await fetch('/api/admin/partners', { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) setPartners(data);
+      }
+    } catch {}
   };
 
   const calculateProposedTotal = () => {

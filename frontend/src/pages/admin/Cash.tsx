@@ -40,13 +40,15 @@ export default function AdminCash() {
 
   const fetchCashData = async () => {
     const token = localStorage.getItem('token');
-    const res = await fetch('/api/admin/cash', { headers: { Authorization: `Bearer ${token}` } });
-    if (res.ok) {
-      const data = await res.json();
-      setBalance(data.balance);
-      setLogs(data.logs);
-      setExpenses(data.expenses);
-    }
+    try {
+      const res = await fetch('/api/admin/cash', { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        const data = await res.json();
+        setBalance(data.balance ?? 0);
+        if (Array.isArray(data.logs)) setLogs(data.logs);
+        if (Array.isArray(data.expenses)) setExpenses(data.expenses);
+      }
+    } catch {}
   };
 
   useEffect(() => { 

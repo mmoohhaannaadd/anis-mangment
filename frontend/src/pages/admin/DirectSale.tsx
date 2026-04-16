@@ -50,7 +50,7 @@ export default function DirectSale() {
     try {
       const res = await fetch('/api/admin/clients', { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
-      setClients(data);
+      if (Array.isArray(data)) setClients(data);
     } catch (err) {
       console.error('Failed to fetch clients', err);
     }
@@ -60,7 +60,7 @@ export default function DirectSale() {
     try {
       const res = await fetch('/api/admin/inventory', { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
-      setProducts(data);
+      if (Array.isArray(data)) setProducts(data);
     } catch (err) {
       console.error('Failed to fetch products', err);
     }

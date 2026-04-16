@@ -47,7 +47,8 @@ export default function Inventory() {
   const fetchProducts = () => {
     fetch('/api/admin/inventory', { headers: { Authorization: `Bearer ${token}` } })
       .then(res => res.json())
-      .then(setProducts)
+      .then(data => { if (Array.isArray(data)) setProducts(data); })
+      .catch(() => {})
       .finally(() => setLoading(false));
   };
 
@@ -64,7 +65,7 @@ export default function Inventory() {
       body: JSON.stringify({
         name: form.name,
         unit: form.unit,
-        costPrice: Number(form.costPrice),
+        costPrice: (form.purchaseUnit === 'carton' && (form.unit === 'kg' || form.unit === 'كغ')) ? Number(form.costPrice) * (Number(form.piecesPerBox) || 1) : Number(form.costPrice),
         sellPrice: Number(form.sellPrice),
         stockQuantity: Number(form.stockQuantity),
         purchaseUnit: form.purchaseUnit,
@@ -86,7 +87,7 @@ export default function Inventory() {
       body: JSON.stringify({
         name: editForm.name,
         unit: editForm.unit,
-        costPrice: Number(editForm.costPrice),
+        costPrice: (editForm.purchaseUnit === 'carton' && (editForm.unit === 'kg' || editForm.unit === 'كغ')) ? Number(editForm.costPrice) * (Number(editForm.piecesPerBox) || 1) : Number(editForm.costPrice),
         sellPrice: Number(editForm.sellPrice),
         purchaseUnit: editForm.purchaseUnit,
         piecesPerBox: Number(editForm.piecesPerBox) || 1,
@@ -140,7 +141,8 @@ export default function Inventory() {
     const qty = Number(form.stockQuantity);
     const isCarton = form.purchaseUnit === 'carton';
     const pieces = isCarton ? qty * (Number(form.piecesPerBox) || 1) : qty;
-    const cost = Number(form.costPrice) * qty;
+    const dbCostPrice = (isCarton && (form.unit === 'kg' || form.unit === 'كغ')) ? Number(form.costPrice) * (Number(form.piecesPerBox) || 1) : Number(form.costPrice);
+    const cost = dbCostPrice * qty;
     return { pieces, cost, isCarton };
   };
 
@@ -209,24 +211,26 @@ export default function Inventory() {
                         {p.stockQuantity}
                         {p.purchaseUnit === 'carton' && p.piecesPerBox > 1 && (
                           <span className="text-xs font-normal text-slate-400 mr-1">
-                            ({(p.stockQuantity / p.piecesPerBox).toFixed(1)} {p.unit === 'kg' || p.unit === 'كغ' ? 'عبوة' : 'كرتونة'})
+                            ({(p.stockQuantity / p.piecesPerBox).toFixed(1)} كرتونة)
                           </span>
                         )}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-500">
-                        سعر التكلفة {p.purchaseUnit === 'carton' ? `(لكل ${p.unit === 'kg' || p.unit === 'كغ' ? 'عبوة' : 'كرتونة'})` : ''}
+                        {p.purchaseUnit === 'carton' && (p.unit === 'kg' || p.unit === 'كغ') ? 'سعر التكلفة (لكل كيلوغرام)' : 'سعر التكلفة'}
                       </span>
-                      <span className="font-medium text-slate-900">{p.costPrice} {currency}</span>
+                      <span className="font-medium text-slate-900">
+                        {p.purchaseUnit === 'carton' && (p.unit === 'kg' || p.unit === 'كغ') ? (p.costPrice / (p.piecesPerBox || 1)).toFixed(2) : p.costPrice} {currency}
+                      </span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-slate-500">سعر البيع (لكل {unitLabels[p.unit] || p.unit})</span>
+                      <span className="text-slate-500">سعر البيع</span>
                       <span className="font-bold text-primary">{p.sellPrice} {currency}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-500">
-                        هامش الربح {p.purchaseUnit === 'carton' ? `(لكل ${p.unit === 'kg' || p.unit === 'كغ' ? 'عبوة' : 'كرتونة'})` : ''}
+                        هامش الربح {p.purchaseUnit === 'carton' ? '(للكرتونة)' : ''}
                       </span>
                       <span className="font-bold text-emerald-600">
                         {((p.sellPrice * (p.piecesPerBox || 1)) - p.costPrice).toFixed(2)} {currency}
@@ -234,7 +238,7 @@ export default function Inventory() {
                     </div>
                     {p.purchaseUnit === 'carton' && p.piecesPerBox > 1 && (
                       <div className="flex justify-between text-xs text-emerald-500">
-                        <span>هامش الربح {p.unit === 'kg' || p.unit === 'كغ' ? 'للكيلو الواحد' : 'للقطعة الواحدة'}</span>
+                        <span>هامش الربح ({unitLabels[p.unit] || p.unit})</span>
                         <span className="font-medium">
                           {(p.sellPrice - (p.costPrice / p.piecesPerBox)).toFixed(2)} {currency}
                         </span>
@@ -249,7 +253,7 @@ export default function Inventory() {
                       onClick={() => { setRestockProduct(p); setRestockQty(''); }}
                     >
                       <PackagePlus className="h-3.5 w-3.5" />
-                      {p.purchaseUnit === 'carton' ? `تعبئة (${p.unit === 'kg' || p.unit === 'كغ' ? 'عبوات' : 'كرتون'})` : 'تعبئة'}
+                      {p.purchaseUnit === 'carton' ? 'تعبئة (كرتون)' : 'تعبئة'}
                     </Button>
                     <Button
                       variant="outline"
@@ -257,9 +261,11 @@ export default function Inventory() {
                       className="gap-1"
                       onClick={() => {
                         setEditingProduct(p);
+                        const isPerKgInput = p.purchaseUnit === 'carton' && (p.unit === 'kg' || p.unit === 'كغ');
+                        const displayCost = isPerKgInput ? (p.costPrice / (p.piecesPerBox || 1)).toString() : String(p.costPrice);
                         setEditForm({
                           name: p.name, unit: p.unit,
-                          costPrice: String(p.costPrice), sellPrice: String(p.sellPrice),
+                          costPrice: displayCost, sellPrice: String(p.sellPrice),
                           purchaseUnit: p.purchaseUnit || 'piece',
                           piecesPerBox: String(p.piecesPerBox || 1),
                         });
@@ -322,7 +328,9 @@ export default function Inventory() {
                 {/* Pieces per box - shown only if carton */}
                 {form.purchaseUnit === 'carton' && (
                   <div className="space-y-2 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                    <label className="text-sm font-medium text-amber-800">عدد القطع في الكرتونة الواحدة</label>
+                    <label className="text-sm font-medium text-amber-800">
+                      {form.unit === 'kg' || form.unit === 'كغ' ? 'عدد الكيلوغرامات في الكرتونة الواحدة' : 'عدد القطع في الكرتونة الواحدة'}
+                    </label>
                     <Input
                       inputMode="numeric" required
                       value={form.piecesPerBox}
@@ -332,7 +340,9 @@ export default function Inventory() {
                       }}
                       placeholder="مثال: 15"
                     />
-                    <p className="text-xs text-amber-600">مثال: إذا كل كرتونة تحتوي 15 قطعة → اكتب 15</p>
+                    <p className="text-xs text-amber-600">
+                      {form.unit === 'kg' || form.unit === 'كغ' ? 'مثال: إذا كل كرتونة تحتوي 10 كغ → اكتب 10' : 'مثال: إذا كل كرتونة تحتوي 15 قطعة → اكتب 15'}
+                    </p>
                   </div>
                 )}
 
@@ -347,7 +357,7 @@ export default function Inventory() {
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">
-                      {form.purchaseUnit === 'carton' ? `كمية (${form.unit === 'kg' || form.unit === 'كغ' ? 'عبوات' : 'كرتونات'})` : `الكمية (${unitLabels[form.unit] || form.unit})`}
+                      الكمية / العدد
                     </label>
                     <Input inputMode="decimal" required value={form.stockQuantity} onChange={e => {
                       const val = e.target.value;
@@ -359,7 +369,7 @@ export default function Inventory() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">
-                      سعر التكلفة {form.purchaseUnit === 'carton' ? `(لكل ${form.unit === 'kg' || form.unit === 'كغ' ? 'عبوة' : 'كرتونة'})` : `(لكل ${unitLabels[form.unit] || form.unit})`}
+                      {form.purchaseUnit === 'carton' ? (form.unit === 'kg' || form.unit === 'كغ' ? 'سعر التكلفة لكل كيلوغرام' : 'سعر التكلفة (للكرتونة)') : 'سعر التكلفة'}
                     </label>
                     <Input inputMode="decimal" required value={form.costPrice} onChange={e => {
                       const val = e.target.value;
@@ -367,7 +377,7 @@ export default function Inventory() {
                     }} />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">سعر البيع (لكل {unitLabels[form.unit] || form.unit})</label>
+                    <label className="text-sm font-medium">سعر البيع</label>
                     <Input inputMode="decimal" required value={form.sellPrice} onChange={e => {
                       const val = e.target.value;
                       if (val === '' || /^\d*\.?\d*$/.test(val)) setForm({ ...form, sellPrice: val });
@@ -453,7 +463,9 @@ export default function Inventory() {
 
                 {editForm.purchaseUnit === 'carton' && (
                   <div className="space-y-2 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                    <label className="text-sm font-medium text-amber-800">عدد القطع في الكرتونة</label>
+                    <label className="text-sm font-medium text-amber-800">
+                      {editForm.unit === 'kg' || editForm.unit === 'كغ' ? 'عدد الكيلوغرامات في الكرتونة' : 'عدد القطع في الكرتونة'}
+                    </label>
                     <Input
                       inputMode="numeric" required
                       value={editForm.piecesPerBox}
@@ -477,7 +489,7 @@ export default function Inventory() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">
-                      سعر التكلفة {editForm.purchaseUnit === 'carton' ? '(كرتونة)' : '(قطعة)'}
+                      {editForm.purchaseUnit === 'carton' ? (editForm.unit === 'kg' || editForm.unit === 'كغ' ? 'سعر التكلفة لكل كيلوغرام' : 'سعر التكلفة (للكرتونة)') : 'سعر التكلفة'}
                     </label>
                     <Input inputMode="decimal" required value={editForm.costPrice} onChange={e => {
                       const val = e.target.value;
@@ -485,7 +497,7 @@ export default function Inventory() {
                     }} />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">سعر البيع (قطعة)</label>
+                    <label className="text-sm font-medium">سعر البيع</label>
                     <Input inputMode="decimal" required value={editForm.sellPrice} onChange={e => {
                       const val = e.target.value;
                       if (val === '' || /^\d*\.?\d*$/.test(val)) setEditForm({ ...editForm, sellPrice: val });
@@ -528,9 +540,7 @@ export default function Inventory() {
 
               <div className="space-y-2">
                 <label className="text-sm font-medium">
-                  {restockProduct.purchaseUnit === 'carton'
-                    ? `عدد ${restockProduct.unit === 'kg' || restockProduct.unit === 'كغ' ? 'العبوات' : 'الكرتونات'} المضافة (${restockProduct.piecesPerBox} ${unitLabels[restockProduct.unit] || restockProduct.unit} للواحدة)`
-                    : `الكمية المضافة (${unitLabels[restockProduct.unit] || restockProduct.unit})`}
+                  الكمية المضافة / العدد
                 </label>
                 <Input
                   inputMode="decimal"

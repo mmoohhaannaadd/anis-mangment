@@ -49,13 +49,34 @@ export default function Dashboard() {
     return fetch(url, {
       headers: { Authorization: `Bearer ${token}` }
     })
-      .then((res) => res.json());
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch dashboard');
+        return res.json();
+      })
+      .then((data) => {
+        if (!data || typeof data !== 'object') return null;
+        return {
+          ...data,
+          totalClients: data.totalClients ?? 0,
+          totalCash: data.totalCash ?? 0,
+          totalRevenue: data.totalRevenue ?? 0,
+          totalExpense: data.totalExpense ?? 0,
+          profit: data.profit ?? 0,
+          pendingOrders: data.pendingOrders ?? 0,
+          confirmedOrders: data.confirmedOrders ?? 0,
+          totalOrders: data.totalOrders ?? 0,
+          totalProducts: data.totalProducts ?? 0,
+          lowStockCount: data.lowStockCount ?? 0,
+          totalDebts: data.totalDebts ?? 0,
+          recentActivities: Array.isArray(data.recentActivities) ? data.recentActivities : [],
+        };
+      });
   };
 
   useEffect(() => {
     fetchStats(currentMonthStart, today)
-      .then(setStats)
-      .catch(console.error);
+      .then(data => { if (data) setStats(data); })
+      .catch(() => {});
   }, [token]);
 
   // Fetch stats for modal when dates change
@@ -63,12 +84,14 @@ export default function Dashboard() {
   useEffect(() => {
     if (isDetailModalOpen) {
       fetchStats(modalDateRange.start, modalDateRange.end)
-        .then(setModalStats)
-        .catch(console.error);
+        .then(data => { if (data) setModalStats(data); })
+        .catch(() => {});
     }
   }, [isDetailModalOpen, modalDateRange]);
 
   if (!stats) return <div className="text-center py-12 text-slate-500 font-bold">جاري تحميل البيانات...</div>;
+
+  const safeActivities = Array.isArray(stats.recentActivities) ? stats.recentActivities : [];
 
   const statCards = [
     { label: 'إجمالي العملاء', value: stats.totalClients, icon: Users, color: 'text-blue-500', bg: 'bg-blue-50', suffix: '' },
@@ -248,13 +271,13 @@ export default function Dashboard() {
           <CardTitle>النشاطات الأخيرة</CardTitle>
         </CardHeader>
         <CardContent>
-          {stats.recentActivities.length === 0 ? (
+          {safeActivities.length === 0 ? (
             <div className="text-slate-500 text-center py-8">
               لا توجد نشاطات حديثة لعرضها.
             </div>
           ) : (
             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
-              {stats.recentActivities.map((activity, i) => (
+              {safeActivities.map((activity, i) => (
                 <motion.div
                   key={i}
                   initial={{ opacity: 0, x: 10 }}

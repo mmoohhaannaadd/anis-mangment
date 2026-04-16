@@ -36,7 +36,8 @@ export default function MyOrders() {
   useEffect(() => {
     fetch('/api/client/my-orders', { headers: { Authorization: `Bearer ${token}` } })
       .then(res => res.json())
-      .then(setOrders)
+      .then(data => { if (Array.isArray(data)) setOrders(data); })
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, [token]);
 

@@ -33,8 +33,13 @@ export default function AdminClients() {
 
   const fetchClients = async () => {
     const token = localStorage.getItem('token');
-    const res = await fetch('/api/admin/clients', { headers: { Authorization: `Bearer ${token}` } });
-    if (res.ok) setClients(await res.json());
+    try {
+      const res = await fetch('/api/admin/clients', { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) setClients(data);
+      }
+    } catch {}
   };
 
   useEffect(() => { 

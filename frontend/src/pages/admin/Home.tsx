@@ -74,7 +74,9 @@ export default function AdminHome() {
       const ordersRes = await fetch('/api/admin/orders', { headers: { Authorization: `Bearer ${token}` } });
       if (ordersRes.ok) {
         const ordersData = await ordersRes.json();
-        setPendingOrders(ordersData.filter((o: Order) => o.status === 'pending'));
+        if (Array.isArray(ordersData)) {
+          setPendingOrders(ordersData.filter((o: Order) => o.status === 'pending'));
+        }
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -292,7 +294,7 @@ export default function AdminHome() {
                         #{order.id}
                       </div>
                       <div>
-                        <p className="font-bold text-slate-900">{order.client.name}</p>
+                        <p className="font-bold text-slate-900">{order.client?.name || 'غير معروف'}</p>
                         <p className="text-xs text-slate-500 flex items-center gap-1">
                           <Clock className="h-3 w-3" />
                           {new Date(order.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
@@ -384,7 +386,7 @@ export default function AdminHome() {
             <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
               <div>
                 <CardTitle className="text-lg font-bold">تفاصيل الطلب #{detailOrder.id}</CardTitle>
-                <p className="text-sm text-slate-500 mt-1">{detailOrder.client.name} - {detailOrder.client.phone}</p>
+                <p className="text-sm text-slate-500 mt-1">{detailOrder.client?.name || 'غير معروف'} - {detailOrder.client?.phone || '-'}</p>
               </div>
               <div className="flex items-center gap-2">
                 {!isEditingMode && detailOrder.status === 'pending' && (
@@ -496,7 +498,7 @@ export default function AdminHome() {
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex justify-between items-center">
                 <div>
                   <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">العميل</p>
-                  <p className="font-bold text-slate-900">{selectedOrder.client.name}</p>
+                  <p className="font-bold text-slate-900">{selectedOrder.client?.name || 'غير معروف'}</p>
                 </div>
                 <div className="text-left">
                   <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">المبلغ المطلوب</p>
