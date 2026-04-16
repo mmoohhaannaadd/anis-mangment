@@ -15,6 +15,9 @@ interface Product {
   costPrice: number;
   sellPrice: number;
   stockQuantity: number;
+  purchaseUnit?: string;
+  piecesPerBox?: number;
+  lowStockThreshold?: number;
 }
 
 interface CartItem extends Product {
@@ -208,7 +211,7 @@ export default function DirectSale() {
                         <span>{product.sellPrice.toFixed(2)} {currency}</span>
                         <span className="text-[10px] text-slate-400">/ {unitLabels[product.unit] || product.unit}</span>
                       </div>
-                      <span className={product.stockQuantity < 10 ? 'text-red-500 font-bold' : ''}>
+                      <span className={product.stockQuantity <= (product.lowStockThreshold ?? 10) ? 'text-red-500 font-bold' : ''}>
                         متوفر {product.stockQuantity}
                       </span>
                     </div>

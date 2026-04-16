@@ -152,7 +152,7 @@ app.get('/api/admin/dashboard', authenticate, requireAdmin, asyncHandler(async (
 
   // Products count + low stock
   const allProducts = await db.select().from(products);
-  const lowStockProducts = allProducts.filter(p => p.stockQuantity < 10);
+  const lowStockProducts = allProducts.filter(p => p.stockQuantity <= p.lowStockThreshold);
 
   // Total debts
   const allTx = await db.select().from(transactions);
@@ -211,7 +211,7 @@ app.get('/api/admin/inventory', authenticate, requireAdmin, asyncHandler(async (
 }));
 
 app.post('/api/admin/inventory', authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  const { name, unit, costPrice, sellPrice, stockQuantity, purchaseUnit, piecesPerBox, isInitialStock } = req.body;
+  const { name, unit, costPrice, sellPrice, stockQuantity, purchaseUnit, piecesPerBox, isInitialStock, lowStockThreshold } = req.body;
   const numPiecesPerBox = Number(piecesPerBox) > 0 ? Number(piecesPerBox) : 1;
   const parsedPurchaseUnit = purchaseUnit || 'piece';
 
@@ -226,6 +226,7 @@ app.post('/api/admin/inventory', authenticate, requireAdmin, asyncHandler(async 
     stockQuantity: initialPieces,
     purchaseUnit: parsedPurchaseUnit,
     piecesPerBox: numPiecesPerBox,
+    lowStockThreshold: Number(lowStockThreshold) >= 0 ? Number(lowStockThreshold) : 10,
   }).returning();
   
   // Cost is per carton if purchaseUnit=carton, else per piece
@@ -247,7 +248,7 @@ app.post('/api/admin/inventory', authenticate, requireAdmin, asyncHandler(async 
 // Update Product
 app.put('/api/admin/inventory/:id', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const productId = parseInt(req.params.id as string);
-  const { name, unit, costPrice, sellPrice, purchaseUnit, piecesPerBox } = req.body;
+  const { name, unit, costPrice, sellPrice, purchaseUnit, piecesPerBox, lowStockThreshold } = req.body;
   
   const existing = await db.query.products.findFirst({ where: eq(products.id, productId) });
   if (!existing) { res.status(404).json({ error: 'المنتج غير موجود' }); return; }
@@ -259,6 +260,7 @@ app.put('/api/admin/inventory/:id', authenticate, requireAdmin, asyncHandler(asy
     sellPrice: Number(sellPrice),
     purchaseUnit: purchaseUnit || 'piece',
     piecesPerBox: numPiecesPerBox,
+    lowStockThreshold: Number(lowStockThreshold) >= 0 ? Number(lowStockThreshold) : 10,
   }).where(eq(products.id, productId));
   const updated = await db.query.products.findFirst({ where: eq(products.id, productId) });
   res.json(updated);

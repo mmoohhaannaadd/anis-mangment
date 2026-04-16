@@ -21,6 +21,7 @@ export const products = sqliteTable('products', {
   // Carton/Box conversion fields
   purchaseUnit: text('purchase_unit').notNull().default('piece'), // 'carton' | 'piece' — how admin buys it
   piecesPerBox: integer('pieces_per_box').notNull().default(1), // e.g. 15 → 1 carton = 15 pieces
+  lowStockThreshold: real('low_stock_threshold').notNull().default(10), // Threshold for low stock warning
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 });
 

@@ -16,6 +16,7 @@ interface Product {
   stockQuantity: number;
   purchaseUnit: string; // 'carton' | 'piece'
   piecesPerBox: number; // e.g. 15
+  lowStockThreshold: number;
 }
 
 export default function Inventory() {
@@ -29,14 +30,14 @@ export default function Inventory() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [form, setForm] = useState({
     name: '', unit: 'piece', costPrice: '', sellPrice: '', stockQuantity: '',
-    purchaseUnit: 'piece', piecesPerBox: '1', isInitialStock: false
+    purchaseUnit: 'piece', piecesPerBox: '1', isInitialStock: false, lowStockThreshold: '10'
   });
 
   // Edit product
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editForm, setEditForm] = useState({
     name: '', unit: '', costPrice: '', sellPrice: '',
-    purchaseUnit: 'piece', piecesPerBox: '1',
+    purchaseUnit: 'piece', piecesPerBox: '1', lowStockThreshold: '10'
   });
 
   // Restock
@@ -71,9 +72,10 @@ export default function Inventory() {
         purchaseUnit: form.purchaseUnit,
         piecesPerBox: Number(form.piecesPerBox) || 1,
         isInitialStock: form.isInitialStock,
+        lowStockThreshold: Number(form.lowStockThreshold) >= 0 ? Number(form.lowStockThreshold) : 10,
       }),
     });
-    setForm({ name: '', unit: 'piece', costPrice: '', sellPrice: '', stockQuantity: '', purchaseUnit: 'piece', piecesPerBox: '1', isInitialStock: false });
+    setForm({ name: '', unit: 'piece', costPrice: '', sellPrice: '', stockQuantity: '', purchaseUnit: 'piece', piecesPerBox: '1', isInitialStock: false, lowStockThreshold: '10' });
     setShowAddForm(false);
     fetchProducts();
   };
@@ -91,6 +93,7 @@ export default function Inventory() {
         sellPrice: Number(editForm.sellPrice),
         purchaseUnit: editForm.purchaseUnit,
         piecesPerBox: Number(editForm.piecesPerBox) || 1,
+        lowStockThreshold: Number(editForm.lowStockThreshold) >= 0 ? Number(editForm.lowStockThreshold) : 10,
       }),
     });
     setEditingProduct(null);
@@ -182,8 +185,8 @@ export default function Inventory() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filteredProducts.map((p, i) => (
             <motion.div key={p.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.03 }}>
-              <Card className={`relative group ${p.stockQuantity < 10 ? "border-red-200 bg-red-50/30" : ""}`}>
-                {p.stockQuantity < 10 && (
+              <Card className={`relative group ${p.stockQuantity <= (p.lowStockThreshold ?? 10) ? "border-red-200 bg-red-50/30" : ""}`}>
+                {p.stockQuantity <= (p.lowStockThreshold ?? 10) && (
                   <div className="absolute top-2 left-2 bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">مخزون منخفض</div>
                 )}
                 <CardHeader className="pb-2">
@@ -207,7 +210,7 @@ export default function Inventory() {
                     <div className="space-y-2 mt-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-500">كمية المخزون ({unitLabels[p.unit] || p.unit})</span>
-                      <span className={`font-bold ${p.stockQuantity < 10 ? 'text-red-600' : 'text-slate-900'}`}>
+                      <span className={`font-bold ${p.stockQuantity <= (p.lowStockThreshold ?? 10) ? 'text-red-600' : 'text-slate-900'}`}>
                         {p.stockQuantity}
                         {p.purchaseUnit === 'carton' && p.piecesPerBox > 1 && (
                           <span className="text-xs font-normal text-slate-400 mr-1">
@@ -268,6 +271,7 @@ export default function Inventory() {
                           costPrice: displayCost, sellPrice: String(p.sellPrice),
                           purchaseUnit: p.purchaseUnit || 'piece',
                           piecesPerBox: String(p.piecesPerBox || 1),
+                          lowStockThreshold: String(p.lowStockThreshold ?? 10),
                         });
                       }}
                     >
@@ -383,6 +387,17 @@ export default function Inventory() {
                       if (val === '' || /^\d*\.?\d*$/.test(val)) setForm({ ...form, sellPrice: val });
                     }} />
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    الحد الأدنى للتنبيه بنفاد المخزون (بـ {unitLabels[form.unit] || form.unit})
+                  </label>
+                  <Input inputMode="decimal" required value={form.lowStockThreshold} onChange={e => {
+                    const val = e.target.value;
+                    if (val === '' || /^\d*\.?\d*$/.test(val)) setForm({ ...form, lowStockThreshold: val });
+                  }} placeholder="مثال: 10" />
+                  <p className="text-xs text-slate-500">سيظهر تحذير بـ "مخزون منخفض" عندما تصل الكمية المتوفرة إلى هذا العدد أو أقل.</p>
                 </div>
 
                 {/* Preview */}
@@ -504,6 +519,17 @@ export default function Inventory() {
                     }} />
                   </div>
                 </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    الحد الأدنى للتنبيه بنفاد المخزون (بـ {unitLabels[editForm.unit] || editForm.unit})
+                  </label>
+                  <Input inputMode="decimal" required value={editForm.lowStockThreshold} onChange={e => {
+                    const val = e.target.value;
+                    if (val === '' || /^\d*\.?\d*$/.test(val)) setEditForm({ ...editForm, lowStockThreshold: val });
+                  }} placeholder="مثال: 10" />
+                </div>
+
                 <div className="flex justify-end gap-2 pt-2">
                   <Button type="button" variant="outline" onClick={() => setEditingProduct(null)}>إلغاء</Button>
                   <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white">حفظ التعديلات</Button>
