@@ -8,6 +8,7 @@ import Inventory from './pages/admin/Inventory';
 import Orders from './pages/admin/Orders';
 import Cash from './pages/admin/Cash';
 import Partners from './pages/admin/Partners';
+import Suppliers from './pages/admin/Suppliers';
 import Clients from './pages/admin/Clients';
 import Analytics from './pages/admin/Analytics';
 import Settings from './pages/admin/Settings';
@@ -46,6 +47,7 @@ function App() {
           <Route path="cash" element={<Cash />} />
           <Route path="expenses" element={<Navigate to="/admin/cash" replace />} />
           <Route path="partners" element={<Partners />} />
+          <Route path="suppliers" element={<Suppliers />} />
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<div className="text-center py-12 text-slate-500">صفحة غير موجودة</div>} />
         </Route>

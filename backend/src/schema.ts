@@ -1,6 +1,18 @@
 import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
 import { relations } from 'drizzle-orm';
 
+export const suppliers = sqliteTable('suppliers', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  phone: text('phone'),
+  notes: text('notes'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+});
+
+export const suppliersRelations = relations(suppliers, ({ many }) => ({
+  products: many(products),
+}));
+
 export const users = sqliteTable('users', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull(),
@@ -22,8 +34,16 @@ export const products = sqliteTable('products', {
   purchaseUnit: text('purchase_unit').notNull().default('piece'), // 'carton' | 'piece' — how admin buys it
   piecesPerBox: integer('pieces_per_box').notNull().default(1), // e.g. 15 → 1 carton = 15 pieces
   lowStockThreshold: real('low_stock_threshold').notNull().default(10), // Threshold for low stock warning
+  supplierId: integer('supplier_id'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
 });
+
+export const productsRelations = relations(products, ({ one }) => ({
+  supplier: one(suppliers, {
+    fields: [products.supplierId],
+    references: [suppliers.id],
+  }),
+}));
 
 export const orders = sqliteTable('orders', {
   id: integer('id').primaryKey({ autoIncrement: true }),

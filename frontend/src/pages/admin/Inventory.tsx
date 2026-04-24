@@ -4,8 +4,13 @@ import { useAppStore } from '@/store';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Package, Plus, Pencil, Trash2, PackagePlus, Search, X, Box } from 'lucide-react';
+import { Package, Plus, Pencil, Trash2, PackagePlus, Search, X, Box, Warehouse, Truck } from 'lucide-react';
 import { motion } from 'framer-motion';
+
+interface Supplier {
+  id: number;
+  name: string;
+}
 
 interface Product {
   id: number;
@@ -17,6 +22,7 @@ interface Product {
   purchaseUnit: string; // 'carton' | 'piece'
   piecesPerBox: number; // e.g. 15
   lowStockThreshold: number;
+  supplierId: number | null;
 }
 
 export default function Inventory() {
@@ -30,14 +36,17 @@ export default function Inventory() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [form, setForm] = useState({
     name: '', unit: 'piece', costPrice: '', sellPrice: '', stockQuantity: '',
-    purchaseUnit: 'piece', piecesPerBox: '1', isInitialStock: false, lowStockThreshold: '10'
+    purchaseUnit: 'piece', piecesPerBox: '1', isInitialStock: false, lowStockThreshold: '2', supplierId: ''
   });
+
+  // Suppliers list
+  const [suppliersList, setSuppliersList] = useState<Supplier[]>([]);
 
   // Edit product
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editForm, setEditForm] = useState({
-    name: '', unit: '', costPrice: '', sellPrice: '',
-    purchaseUnit: 'piece', piecesPerBox: '1', lowStockThreshold: '10'
+    name: '', unit: '', costPrice: '', sellPrice: '', stockQuantity: '',
+    purchaseUnit: 'piece', piecesPerBox: '1', lowStockThreshold: '2', supplierId: ''
   });
 
   // Restock
@@ -55,7 +64,12 @@ export default function Inventory() {
 
   useEffect(() => { 
     // eslint-disable-next-line
-    fetchProducts(); 
+    fetchProducts();
+    // Fetch suppliers for dropdown
+    fetch('/api/admin/suppliers', { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => res.json())
+      .then(data => { if (Array.isArray(data)) setSuppliersList(data); })
+      .catch(() => {});
   }, [token]);
 
   const handleAddProduct = async (e: React.FormEvent) => {
@@ -73,9 +87,10 @@ export default function Inventory() {
         piecesPerBox: Number(form.piecesPerBox) || 1,
         isInitialStock: form.isInitialStock,
         lowStockThreshold: Number(form.lowStockThreshold) >= 0 ? Number(form.lowStockThreshold) : 10,
+        supplierId: form.supplierId ? Number(form.supplierId) : null,
       }),
     });
-    setForm({ name: '', unit: 'piece', costPrice: '', sellPrice: '', stockQuantity: '', purchaseUnit: 'piece', piecesPerBox: '1', isInitialStock: false, lowStockThreshold: '10' });
+    setForm({ name: '', unit: 'piece', costPrice: '', sellPrice: '', stockQuantity: '', purchaseUnit: 'piece', piecesPerBox: '1', isInitialStock: false, lowStockThreshold: '10', supplierId: '' });
     setShowAddForm(false);
     fetchProducts();
   };
@@ -94,6 +109,8 @@ export default function Inventory() {
         purchaseUnit: editForm.purchaseUnit,
         piecesPerBox: Number(editForm.piecesPerBox) || 1,
         lowStockThreshold: Number(editForm.lowStockThreshold) >= 0 ? Number(editForm.lowStockThreshold) : 10,
+        stockQuantity: Number(editForm.stockQuantity),
+        supplierId: editForm.supplierId ? Number(editForm.supplierId) : null,
       }),
     });
     setEditingProduct(null);
@@ -149,8 +166,46 @@ export default function Inventory() {
     return { pieces, cost, isCarton };
   };
 
+  // Calculate total inventory value (wholesale cost)
+  // For carton products: costPrice is per carton, stockQuantity is in pieces
+  // So unit cost = costPrice / piecesPerBox
+  const totalInventoryValue = products.reduce((sum, p) => {
+    const unitCost = (p.purchaseUnit === 'carton' && p.piecesPerBox > 1)
+      ? p.costPrice / p.piecesPerBox
+      : p.costPrice;
+    return sum + (unitCost * p.stockQuantity);
+  }, 0);
+
   return (
     <div className="space-y-6">
+      {/* Inventory Value Card */}
+      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+        <Card className="relative overflow-hidden border-none shadow-lg bg-gradient-to-br from-indigo-600 via-purple-600 to-violet-700 text-white">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.15),transparent_60%)]" />
+          <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full -translate-x-10 translate-y-10" />
+          <CardContent className="relative pt-6 pb-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-white/70 mb-1 flex items-center gap-2">
+                  <Warehouse className="h-4 w-4" />
+                  قيمة المخزون الإجمالية
+                </p>
+                <p className="text-3xl sm:text-4xl font-black tracking-tight">
+                  {totalInventoryValue.toFixed(2)}
+                  <span className="text-lg font-normal text-white/70 mr-2">{currency}</span>
+                </p>
+                <p className="text-xs text-white/50 mt-2">
+                  إجمالي تكلفة شراء البضاعة بسعر الجملة · {products.length} منتج في المخزون
+                </p>
+              </div>
+              <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl">
+                <Warehouse className="h-10 w-10 text-white/80" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-xl border shadow-sm">
         <h2 className="text-2xl font-bold tracking-tight text-primary flex items-center gap-2">
           <Package className="h-6 w-6" />
@@ -269,9 +324,11 @@ export default function Inventory() {
                         setEditForm({
                           name: p.name, unit: p.unit,
                           costPrice: displayCost, sellPrice: String(p.sellPrice),
+                          stockQuantity: String(p.stockQuantity),
                           purchaseUnit: p.purchaseUnit || 'piece',
                           piecesPerBox: String(p.piecesPerBox || 1),
-                          lowStockThreshold: String(p.lowStockThreshold ?? 10),
+                          lowStockThreshold: String(p.lowStockThreshold ?? 2),
+                          supplierId: p.supplierId ? String(p.supplierId) : '',
                         });
                       }}
                     >
@@ -306,6 +363,24 @@ export default function Inventory() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">اسم المنتج</label>
                   <Input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="مثال: بقلاوة" />
+                </div>
+
+                {/* Supplier Selection */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium flex items-center gap-1">
+                    <Truck className="h-3.5 w-3.5" />
+                    المورد
+                  </label>
+                  <select
+                    className="w-full border rounded-md px-3 py-2 text-sm"
+                    value={form.supplierId}
+                    onChange={e => setForm({ ...form, supplierId: e.target.value })}
+                  >
+                    <option value="">بدون مورد</option>
+                    {suppliersList.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Purchase Unit */}
@@ -366,7 +441,7 @@ export default function Inventory() {
                     <Input inputMode="decimal" required value={form.stockQuantity} onChange={e => {
                       const val = e.target.value;
                       if (val === '' || /^\d*\.?\d*$/.test(val)) setForm({ ...form, stockQuantity: val });
-                    }} />
+                    }} placeholder={form.purchaseUnit === 'carton' ? 'عدد الكراتين التي اشتريتها' : 'عدد القطع / العلب التي اشتريتها'} />
                   </div>
                 </div>
 
@@ -396,7 +471,7 @@ export default function Inventory() {
                   <Input inputMode="decimal" required value={form.lowStockThreshold} onChange={e => {
                     const val = e.target.value;
                     if (val === '' || /^\d*\.?\d*$/.test(val)) setForm({ ...form, lowStockThreshold: val });
-                  }} placeholder="مثال: 10" />
+                  }} placeholder="مثال: 2" />
                   <p className="text-xs text-slate-500">سيظهر تحذير بـ "مخزون منخفض" عندما تصل الكمية المتوفرة إلى هذا العدد أو أقل.</p>
                 </div>
 
@@ -453,6 +528,24 @@ export default function Inventory() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">اسم المنتج</label>
                   <Input required value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} />
+                </div>
+
+                {/* Supplier Selection */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium flex items-center gap-1">
+                    <Truck className="h-3.5 w-3.5" />
+                    المورد
+                  </label>
+                  <select
+                    className="w-full border rounded-md px-3 py-2 text-sm"
+                    value={editForm.supplierId}
+                    onChange={e => setEditForm({ ...editForm, supplierId: e.target.value })}
+                  >
+                    <option value="">بدون مورد</option>
+                    {suppliersList.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Purchase Unit */}
@@ -527,7 +620,19 @@ export default function Inventory() {
                   <Input inputMode="decimal" required value={editForm.lowStockThreshold} onChange={e => {
                     const val = e.target.value;
                     if (val === '' || /^\d*\.?\d*$/.test(val)) setEditForm({ ...editForm, lowStockThreshold: val });
-                  }} placeholder="مثال: 10" />
+                  }} placeholder="مثال: 2" />
+                </div>
+
+                {/* Stock Quantity Correction */}
+                <div className="space-y-2 p-3 bg-orange-50 rounded-lg border border-orange-200">
+                  <label className="text-sm font-medium text-orange-800">
+                    تصحيح الكمية الحالية ({unitLabels[editForm.unit] || editForm.unit})
+                  </label>
+                  <Input inputMode="decimal" required value={editForm.stockQuantity} onChange={e => {
+                    const val = e.target.value;
+                    if (val === '' || /^\d*\.?\d*$/.test(val)) setEditForm({ ...editForm, stockQuantity: val });
+                  }} />
+                  <p className="text-xs text-orange-600">استخدم هذا الحقل فقط لتصحيح كمية خاطئة. لإضافة مخزون جديد استخدم زر "تعبئة".</p>
                 </div>
 
                 <div className="flex justify-end gap-2 pt-2">

@@ -3,12 +3,20 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import { db } from './db';
+import { drizzle } from 'drizzle-orm/libsql';
+import { createClient } from '@libsql/client';
+import * as schema from './schema';
 import { users, products, orders, orderItems, transactions, expenses, partners, cashLog, profitDistributions, settings, suppliers } from './schema';
 import asyncHandler from 'express-async-handler';
 import { eq, sum, desc, and, gte, lte, like, sql, not } from 'drizzle-orm';
 
 dotenv.config();
+
+// Use a LOCAL SQLite file for dev — completely separate from production
+const devClient = createClient({
+  url: 'file:./dev-database.db',
+});
+const db = drizzle(devClient, { schema });
 
 const app = express();
 app.use(cors());
@@ -92,12 +100,10 @@ app.get('/api/admin/dashboard', authenticate, requireAdmin, asyncHandler(async (
 
   const allClients = await db.query.users.findMany({ where: eq(users.role, 'client') });
   
-  // 1. Total Cash: Tray balance (Sum In - Sum Out) - Keep as overall balance
   const allIn = await db.select({ total: sql<number>`COALESCE(SUM(amount), 0)` }).from(cashLog).where(eq(cashLog.type, 'in'));
   const allOut = await db.select({ total: sql<number>`COALESCE(SUM(amount), 0)` }).from(cashLog).where(eq(cashLog.type, 'out'));
   const totalCash = (Number(allIn[0]?.total) || 0) - (Number(allOut[0]?.total) || 0);
 
-  // 2. Real Revenue (Total Sales) & COGS - Filtered by date
   const ordersWhere = (start && end) 
     ? and(
         sql`${orders.status} IN ('confirmed', 'delivered')`,
@@ -128,7 +134,6 @@ app.get('/api/admin/dashboard', authenticate, requireAdmin, asyncHandler(async (
     }
   }
 
-  // 3. Operating Expenses - Filtered by date
   const expensesWhere = (start && end)
     ? and(
         gte(expenses.createdAt, start),
@@ -141,26 +146,21 @@ app.get('/api/admin/dashboard', authenticate, requireAdmin, asyncHandler(async (
     .where(expensesWhere);
   const totalOperatingExpenses = Number(allExp[0]?.total) || 0;
 
-  // 4. Net Profit = Gross Profit - Operating Expenses
   const profit = totalSalesRevenue - totalCOGS - totalOperatingExpenses;
   const totalCombinedExpense = totalCOGS + totalOperatingExpenses;
 
-  // Orders stats - Overall
   const allOrders = await db.select().from(orders);
   const pendingOrders = allOrders.filter(o => o.status === 'pending').length;
   const confirmedOrders = allOrders.filter(o => o.status === 'confirmed' || o.status === 'delivered').length;
 
-  // Products count + low stock
   const allProducts = await db.select().from(products);
   const lowStockProducts = allProducts.filter(p => p.stockQuantity <= p.lowStockThreshold);
 
-  // Total debts
   const allTx = await db.select().from(transactions);
   const totalOrdered = allTx.filter(t => t.type === 'order').reduce((a, c) => a + c.amount, 0);
   const totalPaid = allTx.filter(t => t.type === 'payment').reduce((a, c) => a + c.amount, 0);
   const totalDebts = totalOrdered - totalPaid;
 
-  // Recent activities (last 15)
   const recentCashLogs = await db.select().from(cashLog).orderBy(desc(cashLog.createdAt)).limit(10);
   const recentOrders = await db.query.orders.findMany({
     with: { client: true },
@@ -263,7 +263,6 @@ app.post('/api/admin/inventory', authenticate, requireAdmin, asyncHandler(async 
   const numPiecesPerBox = Number(piecesPerBox) > 0 ? Number(piecesPerBox) : 1;
   const parsedPurchaseUnit = purchaseUnit || 'piece';
 
-  // If adding stock by cartons, convert to pieces for storage
   const initialBoxCount = Number(stockQuantity) || 0;
   const initialPieces = parsedPurchaseUnit === 'carton' ? initialBoxCount * numPiecesPerBox : initialBoxCount;
 
@@ -278,7 +277,6 @@ app.post('/api/admin/inventory', authenticate, requireAdmin, asyncHandler(async 
     supplierId: supplierId ? Number(supplierId) : null,
   }).returning();
   
-  // Cost is per carton if purchaseUnit=carton, else per piece
   const totalCost = Number(costPrice) * initialBoxCount;
   if (totalCost > 0 && !isInitialStock) {
     const unitLabel = parsedPurchaseUnit === 'carton' ? `كرتونة (${numPiecesPerBox} قطعة/كرتونة)` : unit;
@@ -312,7 +310,6 @@ app.put('/api/admin/inventory/:id', authenticate, requireAdmin, asyncHandler(asy
     lowStockThreshold: Number(lowStockThreshold) >= 0 ? Number(lowStockThreshold) : 2,
     supplierId: supplierId ? Number(supplierId) : null,
   };
-  // Allow admin to correct stock quantity
   if (stockQuantity !== undefined && stockQuantity !== null) {
     updateData.stockQuantity = Number(stockQuantity);
   }
@@ -324,20 +321,15 @@ app.put('/api/admin/inventory/:id', authenticate, requireAdmin, asyncHandler(asy
 // Delete Product
 app.delete('/api/admin/inventory/:id', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const productId = parseInt(req.params.id as string);
-  
-  // First remove related order_items that reference this product
   await db.delete(orderItems).where(eq(orderItems.productId, productId));
-  
-  // Now safely delete the product
   await db.delete(products).where(eq(products.id, productId));
   res.json({ success: true });
 }));
 
-// Restock - Add stock to existing product
-// quantity = number of cartons (if purchaseUnit='carton') or pieces
+// Restock
 app.post('/api/admin/inventory/:id/restock', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const productId = parseInt(req.params.id as string);
-  const { quantity, isInitialStock } = req.body; // quantity entered by admin (in cartons or pieces)
+  const { quantity, isInitialStock } = req.body;
   const numQty = Number(quantity);
   if (isNaN(numQty) || numQty <= 0) { res.status(400).json({ error: 'كمية غير صالحة' }); return; }
 
@@ -347,13 +339,11 @@ app.post('/api/admin/inventory/:id/restock', authenticate, requireAdmin, asyncHa
   const piecesPerBox = existing.piecesPerBox || 1;
   const isCarton = existing.purchaseUnit === 'carton';
 
-  // Convert to pieces for stock
   const piecesToAdd = isCarton ? numQty * piecesPerBox : numQty;
   const newQty = existing.stockQuantity + piecesToAdd;
 
   await db.update(products).set({ stockQuantity: newQty }).where(eq(products.id, productId));
 
-  // Cost is per carton (or per piece)
   const totalCost = existing.costPrice * numQty;
   const unitLabel = isCarton ? `كرتونة (${piecesPerBox} قطعة)` : existing.unit;
   
@@ -370,7 +360,7 @@ app.post('/api/admin/inventory/:id/restock', authenticate, requireAdmin, asyncHa
   res.json({ success: true, newQuantity: newQty, piecesAdded: piecesToAdd });
 }));
 
-// --- ADMIN ROUTES: ORDERS with items detail ---
+// --- ADMIN ROUTES: ORDERS ---
 app.get('/api/admin/orders', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const allOrders = await db.query.orders.findMany({
     with: { client: true, items: { with: { product: true } } },
@@ -381,7 +371,7 @@ app.get('/api/admin/orders', authenticate, requireAdmin, asyncHandler(async (req
 
 app.put('/api/admin/orders/:id/items', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const orderId = parseInt(req.params.id as string);
-  const { items } = req.body; // Array of items
+  const { items } = req.body;
   
   const order = await db.query.orders.findFirst({ where: eq(orders.id, orderId) });
   if (!order) { res.status(404).json({ error: 'الطلب غير موجود' }); return; }
@@ -420,7 +410,6 @@ app.put('/api/admin/orders/:id/status', authenticate, requireAdmin, asyncHandler
   const wasPending = order.status === 'pending';
 
   if (isNowConfirmed && wasPending) {
-    // 1. Deduct Stock
     for (const item of order.items) {
       const p = await db.query.products.findFirst({ where: eq(products.id, item.productId) });
       if (p) {
@@ -428,7 +417,6 @@ app.put('/api/admin/orders/:id/status', authenticate, requireAdmin, asyncHandler
       }
     }
 
-    // 2. Add client debt
     await db.insert(transactions).values({
       clientId: order.clientId,
       type: 'order',
@@ -436,7 +424,6 @@ app.put('/api/admin/orders/:id/status', authenticate, requireAdmin, asyncHandler
       notes: `طلب #${order.id}`
     });
 
-    // 3. Add payment if received any
     const payment = Number(paidAmount);
     if (!isNaN(payment) && payment > 0) {
       const pTx = await db.insert(transactions).values({
@@ -463,12 +450,10 @@ app.put('/api/admin/orders/:id/status', authenticate, requireAdmin, asyncHandler
 // --- ADMIN ROUTES: DIRECT SALE (POS) ---
 app.post('/api/admin/direct-sale', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const { clientId, customerName, items, discount, paidAmount } = req.body; 
-  // items: { productId, quantity, unitPrice }[]
   if (!items || items.length === 0) { res.status(400).json({ error: 'لا يوجد منتجات في الطلب' }); return; }
 
   let targetClientId = clientId;
 
-  // If no clientId, use or create Direct Sale dummy client
   if (!targetClientId) {
     let directClient = await db.query.users.findFirst({ where: eq(users.phone, 'direct_sale') });
     if (!directClient) {
@@ -494,7 +479,6 @@ app.post('/api/admin/direct-sale', authenticate, requireAdmin, asyncHandler(asyn
     
     const numQty = Number(item.quantity) || 0;
     
-    // check stock
     if (product.stockQuantity < numQty) {
       res.status(400).json({ error: `الكمية المتوفرة من ${product.name} لا تكفي (المتوفر: ${product.stockQuantity})` });
       return;
@@ -514,13 +498,11 @@ app.post('/api/admin/direct-sale', authenticate, requireAdmin, asyncHandler(asyn
       subtotal 
     });
     
-    // Deduct stock immediately!
     await db.update(products).set({ stockQuantity: Number(product.stockQuantity) - numQty }).where(eq(products.id, product.id));
   }
 
   const finalAmount = totalAmount - (Number(discount) || 0);
 
-  // create order, marked as DELIVERED instantly
   const newOrder = await db.insert(orders).values({
     clientId: targetClientId,
     totalAmount: finalAmount,
@@ -531,7 +513,6 @@ app.post('/api/admin/direct-sale', authenticate, requireAdmin, asyncHandler(asyn
     await db.insert(orderItems).values({ ...dbItem, orderId: newOrder[0].id });
   }
 
-  // Record transactions (Order transaction)
   await db.insert(transactions).values({
     clientId: targetClientId,
     type: 'order',
@@ -539,7 +520,6 @@ app.post('/api/admin/direct-sale', authenticate, requireAdmin, asyncHandler(asyn
     notes: `مبيعات مباشرة ${customerName ? `(${customerName}) ` : ''}- طلب #${newOrder[0].id}`
   });
 
-  // Record payment transaction if any
   const payment = Number(paidAmount) || 0;
   if (payment > 0) {
     const pTx = await db.insert(transactions).values({
@@ -549,7 +529,6 @@ app.post('/api/admin/direct-sale', authenticate, requireAdmin, asyncHandler(asyn
       notes: `تسديد ${payment === finalAmount ? 'كامل' : 'جزئي'} - طلب #${newOrder[0].id}`
     }).returning();
 
-    // Cash in
     await db.insert(cashLog).values({
       type: 'in',
       amount: payment,
@@ -582,7 +561,6 @@ app.get('/api/admin/clients', authenticate, requireAdmin, asyncHandler(async (re
   res.json(clientsWithDebt);
 }));
 
-// Admin: Register a new client
 app.post('/api/admin/clients', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const { name, phone, password, whatsapp } = req.body;
   const existing = await db.query.users.findFirst({ where: eq(users.phone, phone) });
@@ -600,29 +578,22 @@ app.post('/api/admin/clients', authenticate, requireAdmin, asyncHandler(async (r
   res.json(newClient[0]);
 }));
 
-// Admin: Delete client and all related data
 app.delete('/api/admin/clients/:id', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const clientId = parseInt(req.params.id as string);
   
-  // 1. Find all client transactions first to clean up cash log
   const clientTx = await db.select().from(transactions).where(eq(transactions.clientId, clientId));
   for (const tx of clientTx) {
     await db.delete(cashLog).where(and(eq(cashLog.referenceType, 'payment'), eq(cashLog.referenceId, tx.id)));
   }
 
-  // 2. Delete all transactions for this client
   await db.delete(transactions).where(eq(transactions.clientId, clientId));
   
-  // 3. Delete all order items for orders belonging to this client
   const clientOrders = await db.select().from(orders).where(eq(orders.clientId, clientId));
   for (const order of clientOrders) {
     await db.delete(orderItems).where(eq(orderItems.orderId, order.id));
   }
   
-  // 4. Delete all orders for this client
   await db.delete(orders).where(eq(orders.clientId, clientId));
-  
-  // 5. Delete the client record
   await db.delete(users).where(eq(users.id, clientId));
   
   res.json({ success: true, message: 'تم حذف العميل وجميع بياناته بنجاح' });
@@ -631,7 +602,7 @@ app.delete('/api/admin/clients/:id', authenticate, requireAdmin, asyncHandler(as
 app.post('/api/admin/transactions', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const { clientId, amount, notes, type } = req.body;
   const numAmount = Number(amount);
-  const txType = type || 'payment'; // default to payment
+  const txType = type || 'payment';
   
   if (isNaN(numAmount) || numAmount <= 0) { res.status(400).json({ error: 'مبلغ غير صالح' }); return; }
 
@@ -639,7 +610,6 @@ app.post('/api/admin/transactions', authenticate, requireAdmin, asyncHandler(asy
     clientId, type: txType, amount: numAmount, notes 
   }).returning();
   
-  // Only payments add to the cash box (In)
   if (txType === 'payment') {
     await db.insert(cashLog).values({
       type: 'in',
@@ -700,11 +670,9 @@ app.post('/api/admin/cash/deposit', authenticate, requireAdmin, asyncHandler(asy
   res.json(log[0]);
 }));
 
-// --- ADMIN ROUTES: PARTNERS (CRUD + DISTRIBUTION) ---
+// --- ADMIN ROUTES: PARTNERS ---
 app.get('/api/admin/partners', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const allPartners = await db.select().from(partners);
-  
-  // Get distributions for each partner
   const allDistributions = await db.select().from(profitDistributions).orderBy(desc(profitDistributions.createdAt));
   
   const partnersWithDetails = allPartners.map(p => ({
@@ -747,7 +715,7 @@ app.put('/api/admin/partners/:id', authenticate, requireAdmin, asyncHandler(asyn
 }));
 
 app.post('/api/admin/partners/distribute', authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  const { distributions } = req.body; // e.g. { "1": "500", "2": "500" }
+  const { distributions } = req.body;
   if (!distributions) { res.status(400).json({ error: 'لا يوجد بيانات للتوزيع' }); return; }
 
   const allPartners = await db.select().from(partners);
@@ -784,13 +752,8 @@ app.post('/api/admin/partners/distribute', authenticate, requireAdmin, asyncHand
   res.json({ success: true, distributions: result });
 }));
 
-// --- ADMIN ROUTES: ANALYTICS ---
+// --- ANALYTICS ---
 app.get('/api/admin/analytics', authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  // Monthly revenue data (last 6 months)
-  const sixMonthsAgo = new Date();
-  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-
-  const allCashLogs = await db.select().from(cashLog).orderBy(cashLog.createdAt);
   const allExpensesList = await db.select().from(expenses).orderBy(expenses.createdAt);
   const allOrdersList = await db.query.orders.findMany({ 
     where: sql`${orders.status} IN ('confirmed', 'delivered')`,
@@ -800,7 +763,6 @@ app.get('/api/admin/analytics', authenticate, requireAdmin, asyncHandler(async (
 
   const monthlyData: Record<string, { revenue: number; expenses: number; orders: number }> = {};
   
-  // 1. Group Sales & COGS by month
   allOrdersList.forEach(order => {
     const date = new Date(order.createdAt);
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -809,9 +771,7 @@ app.get('/api/admin/analytics', authenticate, requireAdmin, asyncHandler(async (
     monthlyData[key].revenue += order.totalAmount;
     monthlyData[key].orders += 1;
 
-    // Calculate COGS for this order
     for (const item of order.items) {
-      // Priority: 1. Stored item.costPrice, 2. Dynamic calculated from current product
       let usedCost = Number(item.costPrice) || 0;
       const product = (item as any).product;
       
@@ -823,7 +783,6 @@ app.get('/api/admin/analytics', authenticate, requireAdmin, asyncHandler(async (
     }
   });
 
-  // 2. Add Operating Expenses to each month
   allExpensesList.forEach(exp => {
     const date = new Date(exp.createdAt);
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -840,8 +799,6 @@ app.get('/api/admin/analytics', authenticate, requireAdmin, asyncHandler(async (
       profit: data.revenue - data.expenses,
     }));
 
-
-  // Top selling products
   const allItems = await db.query.orderItems.findMany({ with: { product: true } });
   const productSales: Record<number, { name: string; totalQuantity: number; totalRevenue: number }> = {};
   allItems.forEach(item => {
@@ -853,7 +810,6 @@ app.get('/api/admin/analytics', authenticate, requireAdmin, asyncHandler(async (
   });
   const topProducts = Object.values(productSales).sort((a, b) => b.totalRevenue - a.totalRevenue).slice(0, 5);
 
-  // Top clients by orders
   const clientOrders: Record<number, { name: string; totalOrders: number; totalSpent: number }> = {};
   allOrdersList.forEach(order => {
     if (!clientOrders[order.clientId]) {
@@ -864,19 +820,13 @@ app.get('/api/admin/analytics', authenticate, requireAdmin, asyncHandler(async (
   });
   const topClients = Object.values(clientOrders).sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 5);
 
-  // Order status summary
   const statusSummary = {
     pending: allOrdersList.filter(o => o.status === 'pending').length,
     confirmed: allOrdersList.filter(o => o.status === 'confirmed').length,
     delivered: allOrdersList.filter(o => o.status === 'delivered').length,
   };
 
-  res.json({
-    monthlyChart,
-    topProducts,
-    topClients,
-    statusSummary,
-  });
+  res.json({ monthlyChart, topProducts, topClients, statusSummary });
 }));
 
 // --- ADMIN ROUTES: SETTINGS ---
@@ -885,9 +835,8 @@ app.get('/api/admin/settings', asyncHandler(async (req, res) => {
   const settingsObj: Record<string, string> = {};
   allSettings.forEach(s => { settingsObj[s.key] = s.value; });
   
-  // Defaults
   const result = {
-    storeName: settingsObj['storeName'] || 'إدارة حلويات الأنيس',
+    storeName: settingsObj['storeName'] || 'بيئة التجارب (مطور)',
     currency: settingsObj['currency'] || '₪',
     phone: settingsObj['phone'] || '',
     address: settingsObj['address'] || '',
@@ -900,7 +849,7 @@ app.get('/api/admin/settings', asyncHandler(async (req, res) => {
 }));
 
 app.put('/api/admin/settings', authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  const updates = req.body; // { storeName, currency, phone, address, whatsapp }
+  const updates = req.body;
   
   for (const [key, value] of Object.entries(updates)) {
     const existing = await db.query.settings.findFirst({ where: eq(settings.key, key) });
@@ -921,21 +870,15 @@ app.get('/api/client/products', authenticate, asyncHandler(async (req, res) => {
 }));
 
 app.post('/api/client/orders', authenticate, asyncHandler(async (req: any, res) => {
-  const { items } = req.body; // { productId, quantity }[]
+  const { items } = req.body;
   if (!items || items.length === 0) { res.status(400).json({ error: 'No items' }); return; }
 
   let totalAmount = 0;
   const dbItems = [];
   
-  // calculate total and prepare items
   for (const item of items) {
     const product = await db.query.products.findFirst({ where: eq(products.id, item.productId) });
     if (!product) continue;
-    
-    // Check if product is available (optional check, but good)
-    if (product.stockQuantity < Number(item.quantity)) {
-      // We can allow pending orders for out of stock, but let's just log it or warn
-    }
     
     const costPerUnit = product.costPrice / (product.purchaseUnit === 'carton' ? product.piecesPerBox : 1);
     const subtotal = product.sellPrice * Number(item.quantity);
@@ -950,7 +893,6 @@ app.post('/api/client/orders', authenticate, asyncHandler(async (req: any, res) 
     });
   }
 
-  // create order
   const newOrder = await db.insert(orders).values({
     clientId: req.user.id,
     totalAmount,
@@ -978,20 +920,12 @@ app.get('/api/client/balance', authenticate, asyncHandler(async (req: any, res) 
   const totalOrdered = clientTx.filter(t => t.type === 'order').reduce((acc, current) => acc + current.amount, 0);
   const totalPaid = clientTx.filter(t => t.type === 'payment').reduce((acc, current) => acc + current.amount, 0);
   
-  // Balance = Payments - Orders (Negative means debt)
   const balance = totalPaid - totalOrdered;
   
   res.json({ balance, totalOrdered, totalPaid });
 }));
 
 app.post('/api/admin/reset-database', authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  const alreadyReset = await db.query.settings.findFirst({ where: eq(settings.key, 'databaseResetPerformed') });
-  if (alreadyReset && alreadyReset.value === 'true') {
-    res.status(400).json({ error: 'لقد تم تصفير قاعدة البيانات مسبقاً' });
-    return;
-  }
-
-  // 1. Delete everything in reverse order of FKs
   await db.delete(orderItems);
   await db.delete(orders);
   await db.delete(transactions);
@@ -1000,42 +934,129 @@ app.post('/api/admin/reset-database', authenticate, requireAdmin, asyncHandler(a
   await db.delete(partners);
   await db.delete(cashLog);
   await db.delete(products);
-  // Delete users except admins
   await db.delete(users).where(not(eq(users.role, 'admin')));
-
-  // Mark as reset
-  if (alreadyReset) {
-    await db.update(settings).set({ value: 'true' }).where(eq(settings.key, 'databaseResetPerformed'));
-  } else {
-    await db.insert(settings).values({ key: 'databaseResetPerformed', value: 'true' });
-  }
 
   res.json({ message: 'تم تصفير قاعدة البيانات بنجاح' });
 }));
 
-const PORT = process.env.PORT || 5000;
+const DEV_PORT = 5001;
 
-// Seed default admin if none exists
-async function seedAdmin() {
-  const admin = await db.query.users.findFirst({ where: eq(users.role, 'admin') });
+// Create tables and seed dev admin
+async function initDevServer() {
+  // Create tables using raw SQL (same schema as production)
+  await devClient.execute(`CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    phone TEXT NOT NULL UNIQUE,
+    password TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'client',
+    whatsapp TEXT,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  )`);
+  await devClient.execute(`CREATE TABLE IF NOT EXISTS products (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    unit TEXT NOT NULL DEFAULT 'piece',
+    cost_price REAL NOT NULL DEFAULT 0,
+    sell_price REAL NOT NULL DEFAULT 0,
+    stock_quantity REAL NOT NULL DEFAULT 0,
+    purchase_unit TEXT NOT NULL DEFAULT 'piece',
+    pieces_per_box INTEGER NOT NULL DEFAULT 1,
+    low_stock_threshold REAL NOT NULL DEFAULT 10,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  )`);
+  await devClient.execute(`CREATE TABLE IF NOT EXISTS orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER NOT NULL REFERENCES users(id),
+    status TEXT NOT NULL DEFAULT 'pending',
+    total_amount REAL NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  )`);
+  await devClient.execute(`CREATE TABLE IF NOT EXISTS order_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER NOT NULL REFERENCES orders(id),
+    product_id INTEGER NOT NULL REFERENCES products(id),
+    quantity REAL NOT NULL,
+    unit_price REAL NOT NULL,
+    cost_price REAL NOT NULL DEFAULT 0,
+    subtotal REAL NOT NULL
+  )`);
+  await devClient.execute(`CREATE TABLE IF NOT EXISTS transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER NOT NULL REFERENCES users(id),
+    type TEXT NOT NULL,
+    amount REAL NOT NULL,
+    notes TEXT,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  )`);
+  await devClient.execute(`CREATE TABLE IF NOT EXISTS expenses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    amount REAL NOT NULL,
+    description TEXT NOT NULL,
+    category TEXT NOT NULL,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  )`);
+  await devClient.execute(`CREATE TABLE IF NOT EXISTS partners (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    payout_type TEXT NOT NULL DEFAULT 'percentage',
+    share_percentage REAL NOT NULL,
+    fixed_amount REAL NOT NULL DEFAULT 0,
+    total_received REAL NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  )`);
+  await devClient.execute(`CREATE TABLE IF NOT EXISTS profit_distributions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    partner_id INTEGER NOT NULL REFERENCES partners(id),
+    amount REAL NOT NULL,
+    notes TEXT,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  )`);
+  await devClient.execute(`CREATE TABLE IF NOT EXISTS cash_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT NOT NULL,
+    amount REAL NOT NULL,
+    reference_type TEXT,
+    reference_id INTEGER,
+    notes TEXT,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  )`);
+  await devClient.execute(`CREATE TABLE IF NOT EXISTS settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key TEXT NOT NULL UNIQUE,
+    value TEXT NOT NULL
+  )`);
+  await devClient.execute(`CREATE TABLE IF NOT EXISTS suppliers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    phone TEXT,
+    notes TEXT,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  )`);
+  // Add supplier_id column to products if not exists
+  try {
+    await devClient.execute(`ALTER TABLE products ADD COLUMN supplier_id INTEGER`);
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
+  // Seed dev admin if not exists
+  const admin = await db.query.users.findFirst({ where: eq(users.phone, 'dev') });
   if (!admin) {
-    const hashedPassword = await bcrypt.hash('admin123', 10);
+    const hashedPassword = await bcrypt.hash('dev123', 10);
     await db.insert(users).values({
-      name: 'المدير',
-      phone: 'admin',
+      name: 'المطور (تجارب)',
+      phone: 'dev',
       password: hashedPassword,
       role: 'admin',
     });
-    console.log('✅ Default admin created: phone=admin, password=admin123');
+    console.log('✅ Dev admin created: phone=dev, password=dev123');
   }
-}
 
-export default app;
-
-if (process.env.NODE_ENV !== 'production') {
-  seedAdmin().then(() => {
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-    });
+  app.listen(DEV_PORT, () => {
+    console.log(`🧪 Dev server running on port ${DEV_PORT} (separate database: dev-database.db)`);
+    console.log(`📌 Login: phone=dev, password=dev123`);
   });
 }
+
+initDevServer();

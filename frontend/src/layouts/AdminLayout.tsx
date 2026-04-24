@@ -11,6 +11,7 @@ import {
   TrendingUp,
   Wallet,
   Handshake,
+  Truck,
   Settings,
   Store,
   LogOut,
@@ -29,6 +30,7 @@ const navItems = [
   { href: '/admin/analytics', icon: TrendingUp, label: 'التحليلات' },
   { href: '/admin/cash', icon: Wallet, label: 'الصندوق والمصروفات' },
   { href: '/admin/partners', icon: Handshake, label: 'الشركاء' },
+  { href: '/admin/suppliers', icon: Truck, label: 'الموردين' },
   { href: '/admin/settings', icon: Settings, label: 'الإعدادات' },
 ];
 
@@ -58,7 +60,7 @@ export default function AdminLayout() {
           <h1 className="text-xl font-bold text-primary">إدارة حلويات الأنيس</h1>
         </div>
         
-        <div className="flex h-[calc(100vh-4rem)] flex-col justify-between p-4">
+        <div className="flex h-[calc(100vh-4rem)] flex-col justify-between p-4 overflow-y-auto pb-20 lg:pb-4">
           <nav className="space-y-1">
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -138,7 +140,7 @@ export default function AdminLayout() {
               key={item.href}
               to={item.href}
               className={cn(
-                "flex flex-col items-center justify-center gap-1 rounded-2xl px-2 py-1 transition-all duration-300 min-w-[70px]",
+                "flex flex-col items-center justify-center gap-1 rounded-2xl px-2 py-1 transition-all duration-300 min-w-[56px]",
                 isActive
                   ? "text-primary"
                   : "text-slate-400 hover:text-slate-600"
@@ -167,6 +169,18 @@ export default function AdminLayout() {
             </Link>
           );
         })}
+        {/* Logout button in bottom nav */}
+        <button
+          onClick={logout}
+          className="flex flex-col items-center justify-center gap-1 rounded-2xl px-2 py-1 transition-all duration-300 min-w-[56px] text-red-400 hover:text-red-600"
+        >
+          <div className="p-2 rounded-xl transition-all duration-300">
+            <LogOut className="h-5 w-5 stroke-[1.5px]" />
+          </div>
+          <span className="text-[9px] font-bold uppercase tracking-tight opacity-60">
+            خروج
+          </span>
+        </button>
       </nav>
     </div>
   );
