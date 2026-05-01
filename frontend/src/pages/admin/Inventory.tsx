@@ -53,7 +53,6 @@ export default function Inventory() {
   // Restock
   const [restockProduct, setRestockProduct] = useState<Product | null>(null);
   const [restockQty, setRestockQty] = useState('');
-  const [isRestockInitial, setIsRestockInitial] = useState(false);
   const [restockPaymentType, setRestockPaymentType] = useState<'cash' | 'debt' | 'initial'>('cash');
 
   const fetchProducts = () => {
