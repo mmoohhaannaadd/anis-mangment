@@ -259,7 +259,7 @@ app.get('/api/admin/inventory', authenticate, requireAdmin, asyncHandler(async (
 }));
 
 app.post('/api/admin/inventory', authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  const { name, unit, costPrice, sellPrice, stockQuantity, purchaseUnit, piecesPerBox, isInitialStock, lowStockThreshold, supplierId } = req.body;
+  const { name, unit, costPrice, sellPrice, stockQuantity, purchaseUnit, piecesPerBox, isInitialStock, paymentType, lowStockThreshold, supplierId } = req.body;
   const numPiecesPerBox = Number(piecesPerBox) > 0 ? Number(piecesPerBox) : 1;
   const parsedPurchaseUnit = purchaseUnit || 'piece';
 
@@ -278,17 +278,32 @@ app.post('/api/admin/inventory', authenticate, requireAdmin, asyncHandler(async 
     supplierId: supplierId ? Number(supplierId) : null,
   }).returning();
   
+  // Determine effective payment type (paymentType overrides legacy isInitialStock)
+  const effectivePayment = paymentType || (isInitialStock ? 'initial' : 'cash');
+  
   // Cost is per carton if purchaseUnit=carton, else per piece
   const totalCost = Number(costPrice) * initialBoxCount;
-  if (totalCost > 0 && !isInitialStock) {
+  if (totalCost > 0 && effectivePayment !== 'initial') {
     const unitLabel = parsedPurchaseUnit === 'carton' ? `كرتونة (${numPiecesPerBox} قطعة/كرتونة)` : unit;
-    await db.insert(cashLog).values({
-      type: 'out',
-      amount: totalCost,
-      referenceType: 'inventory_purchase',
-      referenceId: newProduct[0].id,
-      notes: `شراء مخزون: ${initialBoxCount} ${unitLabel} من ${name} = ${initialPieces} قطعة`,
-    });
+    if (effectivePayment === 'cash') {
+      // Deduct from cash box immediately
+      await db.insert(cashLog).values({
+        type: 'out',
+        amount: totalCost,
+        referenceType: 'inventory_purchase',
+        referenceId: newProduct[0].id,
+        notes: `شراء مخزون (نقداً): ${initialBoxCount} ${unitLabel} من ${name} = ${initialPieces} قطعة`,
+      });
+    } else if (effectivePayment === 'debt') {
+      // Record as supplier debt — tracked but not deducted from cash
+      await db.insert(cashLog).values({
+        type: 'out',
+        amount: totalCost,
+        referenceType: 'supplier_debt',
+        referenceId: newProduct[0].id,
+        notes: `دين للمورد (مخزون): ${initialBoxCount} ${unitLabel} من ${name} = ${initialPieces} قطعة`,
+      });
+    }
   }
   
   res.json(newProduct[0]);
@@ -337,7 +352,7 @@ app.delete('/api/admin/inventory/:id', authenticate, requireAdmin, asyncHandler(
 // quantity = number of cartons (if purchaseUnit='carton') or pieces
 app.post('/api/admin/inventory/:id/restock', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const productId = parseInt(req.params.id as string);
-  const { quantity, isInitialStock } = req.body; // quantity entered by admin (in cartons or pieces)
+  const { quantity, isInitialStock, paymentType } = req.body; // quantity entered by admin (in cartons or pieces)
   const numQty = Number(quantity);
   if (isNaN(numQty) || numQty <= 0) { res.status(400).json({ error: 'كمية غير صالحة' }); return; }
 
@@ -357,14 +372,29 @@ app.post('/api/admin/inventory/:id/restock', authenticate, requireAdmin, asyncHa
   const totalCost = existing.costPrice * numQty;
   const unitLabel = isCarton ? `كرتونة (${piecesPerBox} قطعة)` : existing.unit;
   
-  if (!isInitialStock) {
-    await db.insert(cashLog).values({
-      type: 'out',
-      amount: totalCost,
-      referenceType: 'inventory_purchase',
-      referenceId: productId,
-      notes: `إضافة مخزون: ${numQty} ${unitLabel} من ${existing.name} = ${piecesToAdd} قطعة`,
-    });
+  // Determine effective payment type (paymentType overrides legacy isInitialStock)
+  const effectivePayment = paymentType || (isInitialStock ? 'initial' : 'cash');
+  
+  if (effectivePayment !== 'initial') {
+    if (effectivePayment === 'cash') {
+      // Deduct from cash box immediately
+      await db.insert(cashLog).values({
+        type: 'out',
+        amount: totalCost,
+        referenceType: 'inventory_purchase',
+        referenceId: productId,
+        notes: `إضافة مخزون (نقداً): ${numQty} ${unitLabel} من ${existing.name} = ${piecesToAdd} قطعة`,
+      });
+    } else if (effectivePayment === 'debt') {
+      // Record as supplier debt — tracked but not deducted from cash
+      await db.insert(cashLog).values({
+        type: 'out',
+        amount: totalCost,
+        referenceType: 'supplier_debt',
+        referenceId: productId,
+        notes: `دين للمورد (تعبئة مخزون): ${numQty} ${unitLabel} من ${existing.name} = ${piecesToAdd} قطعة`,
+      });
+    }
   }
 
   res.json({ success: true, newQuantity: newQty, piecesAdded: piecesToAdd });

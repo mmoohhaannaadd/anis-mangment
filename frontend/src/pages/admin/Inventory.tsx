@@ -36,7 +36,8 @@ export default function Inventory() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [form, setForm] = useState({
     name: '', unit: 'piece', costPrice: '', sellPrice: '', stockQuantity: '',
-    purchaseUnit: 'piece', piecesPerBox: '1', isInitialStock: false, lowStockThreshold: '2', supplierId: ''
+    purchaseUnit: 'piece', piecesPerBox: '1', isInitialStock: false, lowStockThreshold: '2', supplierId: '',
+    paymentType: 'cash' as 'cash' | 'debt' | 'initial',
   });
 
   // Suppliers list
@@ -53,6 +54,7 @@ export default function Inventory() {
   const [restockProduct, setRestockProduct] = useState<Product | null>(null);
   const [restockQty, setRestockQty] = useState('');
   const [isRestockInitial, setIsRestockInitial] = useState(false);
+  const [restockPaymentType, setRestockPaymentType] = useState<'cash' | 'debt' | 'initial'>('cash');
 
   const fetchProducts = () => {
     fetch('/api/admin/inventory', { headers: { Authorization: `Bearer ${token}` } })
@@ -85,12 +87,13 @@ export default function Inventory() {
         stockQuantity: Number(form.stockQuantity),
         purchaseUnit: form.purchaseUnit,
         piecesPerBox: Number(form.piecesPerBox) || 1,
-        isInitialStock: form.isInitialStock,
+        isInitialStock: form.paymentType === 'initial',
+        paymentType: form.paymentType,
         lowStockThreshold: Number(form.lowStockThreshold) >= 0 ? Number(form.lowStockThreshold) : 10,
         supplierId: form.supplierId ? Number(form.supplierId) : null,
       }),
     });
-    setForm({ name: '', unit: 'piece', costPrice: '', sellPrice: '', stockQuantity: '', purchaseUnit: 'piece', piecesPerBox: '1', isInitialStock: false, lowStockThreshold: '10', supplierId: '' });
+    setForm({ name: '', unit: 'piece', costPrice: '', sellPrice: '', stockQuantity: '', purchaseUnit: 'piece', piecesPerBox: '1', isInitialStock: false, lowStockThreshold: '10', supplierId: '', paymentType: 'cash' });
     setShowAddForm(false);
     fetchProducts();
   };
@@ -131,11 +134,16 @@ export default function Inventory() {
     await fetch(`/api/admin/inventory/${restockProduct.id}/restock`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ quantity: Number(restockQty), isInitialStock: isRestockInitial }),
+      body: JSON.stringify({
+        quantity: Number(restockQty),
+        isInitialStock: restockPaymentType === 'initial',
+        paymentType: restockPaymentType,
+      }),
     });
     setRestockProduct(null);
     setRestockQty('');
     setIsRestockInitial(false);
+    setRestockPaymentType('cash');
     fetchProducts();
   };
 
@@ -483,27 +491,63 @@ export default function Inventory() {
                       {preview.isCarton && (
                         <p>📦 <span className="text-slate-600">ستُضاف:</span> <strong className="text-blue-700">{preview.pieces} {unitLabels[form.unit] || form.unit}</strong> ({form.stockQuantity} × {form.piecesPerBox})</p>
                       )}
-                      {preview.cost > 0 && !form.isInitialStock && (
-                        <p>💰 <span className="text-slate-600">التكلفة الإجمالية:</span> <strong className="text-red-600">{preview.cost.toFixed(2)} {currency}</strong></p>
+                      {preview.cost > 0 && form.paymentType === 'cash' && (
+                        <p>💰 <span className="text-slate-600">التكلفة الإجمالية:</span> <strong className="text-red-600">{preview.cost.toFixed(2)} {currency}</strong> <span className="text-xs text-slate-400">(ستُخصم من الصندوق)</span></p>
+                      )}
+                      {preview.cost > 0 && form.paymentType === 'debt' && (
+                        <p>📋 <span className="text-slate-600">التكلفة الإجمالية:</span> <strong className="text-orange-600">{preview.cost.toFixed(2)} {currency}</strong> <span className="text-xs text-slate-400">(دين على المورد - لن يُخصم من الصندوق)</span></p>
+                      )}
+                      {form.paymentType === 'initial' && (
+                        <p className="text-xs text-slate-500">📌 رصيد افتتاحي - لن يُسجَّل أي حركة مالية</p>
                       )}
                     </div>
                   );
                 })()}
 
-                {settings.enableInitialStock && (
-                  <div className="flex items-center space-x-2 space-x-reverse pt-2 mt-4">
-                    <input
-                      type="checkbox"
-                      id="initialStock"
-                      checked={form.isInitialStock}
-                      onChange={(e) => setForm({ ...form, isInitialStock: e.target.checked })}
-                      className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                    />
-                    <label htmlFor="initialStock" className="text-sm font-medium text-slate-700 cursor-pointer">
-                      رصيد افتتاحي للمحل (لن تُخصم التكلفة من الصندوق)
-                    </label>
+                {/* Payment Type Selector */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">طريقة الدفع للمورد</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, paymentType: 'cash', isInitialStock: false })}
+                      className={`border rounded-lg p-2.5 text-xs font-medium transition-all text-center ${
+                        form.paymentType === 'cash'
+                          ? 'border-green-500 bg-green-50 text-green-700'
+                          : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                      }`}
+                    >
+                      💵 دفعت نقداً
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, paymentType: 'debt', isInitialStock: false })}
+                      className={`border rounded-lg p-2.5 text-xs font-medium transition-all text-center ${
+                        form.paymentType === 'debt'
+                          ? 'border-orange-500 bg-orange-50 text-orange-700'
+                          : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                      }`}
+                    >
+                      📋 دين للمورد
+                    </button>
+                    {settings.enableInitialStock && (
+                      <button
+                        type="button"
+                        onClick={() => setForm({ ...form, paymentType: 'initial', isInitialStock: true })}
+                        className={`border rounded-lg p-2.5 text-xs font-medium transition-all text-center ${
+                          form.paymentType === 'initial'
+                            ? 'border-slate-500 bg-slate-50 text-slate-700'
+                            : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                        }`}
+                      >
+                        📌 افتتاحي
+                      </button>
+                    )}
                   </div>
-                )}
+                  {form.paymentType === 'cash' && <p className="text-xs text-green-600">✅ سيتم خصم التكلفة من الصندوق فوراً</p>}
+                  {form.paymentType === 'debt' && <p className="text-xs text-orange-600">⚠️ ستُسجَّل كدين على المورد ولن تُخصم من الصندوق الآن</p>}
+                  {form.paymentType === 'initial' && <p className="text-xs text-slate-500">📌 رصيد افتتاحي للمحل - لن تُسجَّل أي حركة مالية</p>}
+                </div>
 
                 <div className="flex justify-end gap-2 pt-2">
                   <Button type="button" variant="outline" onClick={() => setShowAddForm(false)}>إلغاء</Button>
@@ -694,30 +738,63 @@ export default function Inventory() {
                     {!preview.isCarton && (
                       <p>✅ ستُضاف: <strong className="text-blue-700">{restockQty} {unitLabels[restockProduct.unit] || restockProduct.unit}</strong></p>
                     )}
-                    {!isRestockInitial && (
-                      <>
-                        <p>💰 التكلفة: <strong className="text-red-600">{preview.cost.toFixed(2)} {currency}</strong></p>
-                        <p className="text-xs text-slate-500">سيتم خصمها من الصندوق</p>
-                      </>
+                    {restockPaymentType === 'cash' && (
+                      <p>💰 التكلفة: <strong className="text-red-600">{preview.cost.toFixed(2)} {currency}</strong> <span className="text-xs text-slate-400">(ستُخصم من الصندوق)</span></p>
+                    )}
+                    {restockPaymentType === 'debt' && (
+                      <p>📋 التكلفة: <strong className="text-orange-600">{preview.cost.toFixed(2)} {currency}</strong> <span className="text-xs text-slate-400">(دين على المورد)</span></p>
+                    )}
+                    {restockPaymentType === 'initial' && (
+                      <p className="text-xs text-slate-500">📌 رصيد افتتاحي - لن يُسجَّل أي حركة مالية</p>
                     )}
                   </div>
                 );
               })()}
 
-              {settings.enableInitialStock && (
-                <div className="flex items-center space-x-2 space-x-reverse pt-2 mt-4">
-                  <input
-                    type="checkbox"
-                    id="restockInitial"
-                    checked={isRestockInitial}
-                    onChange={(e) => setIsRestockInitial(e.target.checked)}
-                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                  />
-                  <label htmlFor="restockInitial" className="text-sm font-medium text-slate-700 cursor-pointer">
-                    رصيد افتتاحي (لن تُخصم التكلفة من الصندوق)
-                  </label>
+              {/* Payment Type Selector */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">طريقة الدفع للمورد</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setRestockPaymentType('cash'); setIsRestockInitial(false); }}
+                    className={`border rounded-lg p-2.5 text-xs font-medium transition-all text-center ${
+                      restockPaymentType === 'cash'
+                        ? 'border-green-500 bg-green-50 text-green-700'
+                        : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                    }`}
+                  >
+                    💵 دفعت نقداً
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setRestockPaymentType('debt'); setIsRestockInitial(false); }}
+                    className={`border rounded-lg p-2.5 text-xs font-medium transition-all text-center ${
+                      restockPaymentType === 'debt'
+                        ? 'border-orange-500 bg-orange-50 text-orange-700'
+                        : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                    }`}
+                  >
+                    📋 دين للمورد
+                  </button>
+                  {settings.enableInitialStock && (
+                    <button
+                      type="button"
+                      onClick={() => { setRestockPaymentType('initial'); setIsRestockInitial(true); }}
+                      className={`border rounded-lg p-2.5 text-xs font-medium transition-all text-center ${
+                        restockPaymentType === 'initial'
+                          ? 'border-slate-500 bg-slate-50 text-slate-700'
+                          : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                      }`}
+                    >
+                      📌 افتتاحي
+                    </button>
+                  )}
                 </div>
-              )}
+                {restockPaymentType === 'cash' && <p className="text-xs text-green-600">✅ سيتم خصم التكلفة من الصندوق فوراً</p>}
+                {restockPaymentType === 'debt' && <p className="text-xs text-orange-600">⚠️ ستُسجَّل كدين على المورد ولن تُخصم من الصندوق الآن</p>}
+                {restockPaymentType === 'initial' && <p className="text-xs text-slate-500">📌 رصيد افتتاحي للمحل - لن تُسجَّل أي حركة مالية</p>}
+              </div>
 
               <div className="flex justify-end gap-2 pt-2">
                 <Button variant="outline" onClick={() => setRestockProduct(null)}>إلغاء</Button>
