@@ -141,7 +141,6 @@ export default function Inventory() {
     });
     setRestockProduct(null);
     setRestockQty('');
-    setIsRestockInitial(false);
     setRestockPaymentType('cash');
     fetchProducts();
   };
@@ -756,7 +755,7 @@ export default function Inventory() {
                 <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
-                    onClick={() => { setRestockPaymentType('cash'); setIsRestockInitial(false); }}
+                    onClick={() => { setRestockPaymentType('cash'); }}
                     className={`border rounded-lg p-2.5 text-xs font-medium transition-all text-center ${
                       restockPaymentType === 'cash'
                         ? 'border-green-500 bg-green-50 text-green-700'
@@ -767,7 +766,7 @@ export default function Inventory() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setRestockPaymentType('debt'); setIsRestockInitial(false); }}
+                    onClick={() => { setRestockPaymentType('debt'); }}
                     className={`border rounded-lg p-2.5 text-xs font-medium transition-all text-center ${
                       restockPaymentType === 'debt'
                         ? 'border-orange-500 bg-orange-50 text-orange-700'
@@ -779,7 +778,7 @@ export default function Inventory() {
                   {settings.enableInitialStock && (
                     <button
                       type="button"
-                      onClick={() => { setRestockPaymentType('initial'); setIsRestockInitial(true); }}
+                      onClick={() => { setRestockPaymentType('initial'); }}
                       className={`border rounded-lg p-2.5 text-xs font-medium transition-all text-center ${
                         restockPaymentType === 'initial'
                           ? 'border-slate-500 bg-slate-50 text-slate-700'
