@@ -658,6 +658,47 @@ app.delete('/api/admin/clients/:id', authenticate, requireAdmin, asyncHandler(as
   res.json({ success: true, message: 'تم حذف العميل وجميع بياناته بنجاح' });
 }));
 
+// --- ADMIN ROUTES: CLIENT INVOICE (Transaction History) ---
+app.get('/api/admin/clients/:id/invoice', authenticate, requireAdmin, asyncHandler(async (req, res) => {
+  const clientId = parseInt(req.params.id as string);
+  
+  const client = await db.query.users.findFirst({ where: eq(users.id, clientId) });
+  if (!client) { res.status(404).json({ error: 'العميل غير موجود' }); return; }
+  
+  // Get all transactions for this client, ordered by date descending
+  const clientTx = await db.select().from(transactions)
+    .where(eq(transactions.clientId, clientId))
+    .orderBy(desc(transactions.createdAt));
+  
+  // Calculate running balance (from oldest to newest, then reverse for display)
+  const txAsc = [...clientTx].reverse();
+  let runningBalance = 0;
+  const txWithBalance = txAsc.map(tx => {
+    if (tx.type === 'order') {
+      runningBalance += tx.amount;
+    } else if (tx.type === 'payment') {
+      runningBalance -= tx.amount;
+    }
+    return { ...tx, runningBalance };
+  });
+  
+  // Reverse back to newest-first for display
+  txWithBalance.reverse();
+  
+  const totalOrdered = clientTx.filter(t => t.type === 'order').reduce((acc, t) => acc + t.amount, 0);
+  const totalPaid = clientTx.filter(t => t.type === 'payment').reduce((acc, t) => acc + t.amount, 0);
+  
+  res.json({
+    client: { id: client.id, name: client.name, phone: client.phone },
+    transactions: txWithBalance,
+    summary: {
+      totalOrdered,
+      totalPaid,
+      currentDebt: totalOrdered - totalPaid,
+    }
+  });
+}));
+
 app.post('/api/admin/transactions', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const { clientId, amount, notes, type } = req.body;
   const numAmount = Number(amount);

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Users, Search, Plus, X, Trash2, AlertTriangle } from 'lucide-react';
+import { Users, Search, Plus, X, Trash2, AlertTriangle, FileText } from 'lucide-react';
 import { useCurrency } from '@/contexts/SettingsContext';
 
 type ClientRecord = {
@@ -12,6 +12,21 @@ type ClientRecord = {
   totalDebt: number;
   totalOrdered: number;
   totalPaid: number;
+};
+
+type InvoiceTx = {
+  id: number;
+  type: string;
+  amount: number;
+  notes: string | null;
+  createdAt: string;
+  runningBalance: number;
+};
+
+type InvoiceData = {
+  client: { id: number; name: string; phone: string };
+  transactions: InvoiceTx[];
+  summary: { totalOrdered: number; totalPaid: number; currentDebt: number };
 };
 
 export default function AdminClients() {
@@ -30,6 +45,10 @@ export default function AdminClients() {
 
   // Delete client
   const [clientToDelete, setClientToDelete] = useState<ClientRecord | null>(null);
+
+  // Invoice
+  const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
 
   const fetchClients = async () => {
     const token = localStorage.getItem('token');
@@ -118,6 +137,27 @@ export default function AdminClients() {
 
   const totalDebts = clients.reduce((a, c) => a + Math.max(0, c.totalDebt), 0);
 
+  const fetchInvoice = async (client: ClientRecord) => {
+    setInvoiceLoading(true);
+    const token = localStorage.getItem('token');
+    try {
+      const res = await fetch(`/api/admin/clients/${client.id}/invoice`, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        const data = await res.json();
+        setInvoiceData(data);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setInvoiceLoading(false);
+    }
+  };
+
+  const formatDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-xl border shadow-sm">
@@ -188,7 +228,7 @@ export default function AdminClients() {
                 <span className="text-sm">{client.totalDebt > 0 ? 'المتبقي عليه (الذمة)' : 'الرصيد الحالي'}</span>
                 <strong className="text-xl">{client.totalDebt} {currency}</strong>
               </div>
-              <div className="grid grid-cols-2 gap-2 mt-2">
+              <div className="grid grid-cols-3 gap-2 mt-2">
                 <Button 
                   variant="outline" 
                   size="sm"
@@ -204,6 +244,16 @@ export default function AdminClients() {
                   onClick={() => setSelectedDebtClient(client)}
                 >
                   إضافة دين سابق
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="border-blue-200 text-blue-700 hover:bg-blue-50"
+                  onClick={() => fetchInvoice(client)}
+                  disabled={invoiceLoading}
+                >
+                  <FileText className="h-3.5 w-3.5 ml-1" />
+                  الفاتورة
                 </Button>
               </div>
             </CardContent>
@@ -328,6 +378,83 @@ export default function AdminClients() {
                 <Button variant="outline" onClick={() => setClientToDelete(null)}>إلغاء</Button>
                 <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={handleDeleteClient}>نعم، احذف العميل</Button>
               </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Invoice Modal */}
+      {invoiceData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <Card className="w-full max-w-2xl shadow-xl border-blue-200 animate-in fade-in zoom-in-95 max-h-[90vh] flex flex-col">
+            <CardHeader className="flex flex-row items-center justify-between bg-gradient-to-l from-blue-50 to-indigo-50 rounded-t-xl border-b border-blue-100 shrink-0">
+              <CardTitle className="flex items-center gap-2 text-blue-900">
+                <FileText className="h-5 w-5" />
+                فاتورة العميل: {invoiceData.client.name}
+              </CardTitle>
+              <Button variant="ghost" size="icon" className="text-blue-600 hover:bg-blue-100" onClick={() => setInvoiceData(null)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-4 overflow-y-auto flex-1">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-center">
+                  <p className="text-xs text-slate-500 mb-1">إجمالي السحوبات</p>
+                  <p className="text-lg font-bold text-slate-900">{invoiceData.summary.totalOrdered.toFixed(2)} {currency}</p>
+                </div>
+                <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200 text-center">
+                  <p className="text-xs text-emerald-600 mb-1">إجمالي المدفوع</p>
+                  <p className="text-lg font-bold text-emerald-700">{invoiceData.summary.totalPaid.toFixed(2)} {currency}</p>
+                </div>
+                <div className={`p-3 rounded-lg border text-center ${invoiceData.summary.currentDebt > 0 ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
+                  <p className={`text-xs mb-1 ${invoiceData.summary.currentDebt > 0 ? 'text-red-600' : 'text-green-600'}`}>الذمة الحالية</p>
+                  <p className={`text-lg font-bold ${invoiceData.summary.currentDebt > 0 ? 'text-red-700' : 'text-green-700'}`}>{invoiceData.summary.currentDebt.toFixed(2)} {currency}</p>
+                </div>
+              </div>
+
+              {/* Transactions Table */}
+              {invoiceData.transactions.length === 0 ? (
+                <div className="text-center py-8">
+                  <FileText className="h-10 w-10 mx-auto text-slate-300 mb-3" />
+                  <p className="text-slate-500">لا توجد حركات مسجّلة لهذا العميل.</p>
+                </div>
+              ) : (
+                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                  <table className="w-full text-sm" dir="rtl">
+                    <thead className="bg-slate-100 text-slate-700">
+                      <tr>
+                        <th className="py-2.5 px-3 text-right font-semibold">التاريخ</th>
+                        <th className="py-2.5 px-3 text-right font-semibold">النوع</th>
+                        <th className="py-2.5 px-3 text-right font-semibold">المبلغ</th>
+                        <th className="py-2.5 px-3 text-right font-semibold">الرصيد</th>
+                        <th className="py-2.5 px-3 text-right font-semibold">ملاحظات</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {invoiceData.transactions.map((tx) => (
+                        <tr key={tx.id} className={`${tx.type === 'payment' ? 'bg-emerald-50/50' : 'bg-red-50/50'} hover:bg-slate-50 transition-colors`}>
+                          <td className="py-2.5 px-3 text-slate-600 whitespace-nowrap text-xs">{formatDate(tx.createdAt)}</td>
+                          <td className="py-2.5 px-3">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                              tx.type === 'payment' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                            }`}>
+                              {tx.type === 'payment' ? 'دفعة' : 'دين'}
+                            </span>
+                          </td>
+                          <td className={`py-2.5 px-3 font-semibold ${tx.type === 'payment' ? 'text-emerald-700' : 'text-red-700'}`}>
+                            {tx.type === 'payment' ? '-' : '+'}{tx.amount.toFixed(2)} {currency}
+                          </td>
+                          <td className={`py-2.5 px-3 font-medium ${tx.runningBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {tx.runningBalance.toFixed(2)} {currency}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-500 text-xs max-w-[150px] truncate">{tx.notes || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
