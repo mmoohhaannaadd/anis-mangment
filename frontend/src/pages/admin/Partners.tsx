@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Handshake, Plus, Pencil, Trash2, X, Banknote } from 'lucide-react';
 import { useCurrency } from '@/contexts/SettingsContext';
+import { offlineFetch } from '@/lib/offlineFetch';
 
 type Distribution = {
   id: number;
@@ -45,7 +46,7 @@ export default function AdminPartners() {
   const fetchPartners = async () => {
     const token = localStorage.getItem('token');
     try {
-      const res = await fetch('/api/admin/partners', { headers: { Authorization: `Bearer ${token}` } });
+      const res = await offlineFetch('/api/admin/partners', { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) setPartners(data);
@@ -66,7 +67,7 @@ export default function AdminPartners() {
     e.preventDefault();
     if (!newPartnerName) return;
     const token = localStorage.getItem('token');
-    await fetch('/api/admin/partners', {
+    await offlineFetch('/api/admin/partners', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ 
@@ -86,7 +87,7 @@ export default function AdminPartners() {
     e.preventDefault();
     if (!editingPartner) return;
     const token = localStorage.getItem('token');
-    await fetch(`/api/admin/partners/${editingPartner.id}`, {
+    await offlineFetch(`/api/admin/partners/${editingPartner.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ 
@@ -103,7 +104,7 @@ export default function AdminPartners() {
   const handleDeletePartner = async (id: number) => {
     if (!confirm('هل أنت متأكد من حذف هذا الشريك؟')) return;
     const token = localStorage.getItem('token');
-    await fetch(`/api/admin/partners/${id}`, {
+    await offlineFetch(`/api/admin/partners/${id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -115,7 +116,7 @@ export default function AdminPartners() {
     if (!hasAnyValue) return;
 
     const token = localStorage.getItem('token');
-    const res = await fetch('/api/admin/partners/distribute', {
+    const res = await offlineFetch('/api/admin/partners/distribute', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ distributions: manualDistributions })

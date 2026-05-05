@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAppStore } from '@/store';
 import { useCurrency } from '@/contexts/SettingsContext';
+import { offlineFetch } from '@/lib/offlineFetch';
+import { offlineProducts } from '@/lib/offlineDb';
 import { Search, Plus, Minus, Trash2, ShoppingCart, CheckCircle2, User } from 'lucide-react';
 
 interface Product {
@@ -51,7 +53,7 @@ export default function DirectSale() {
 
   const fetchClients = async () => {
     try {
-      const res = await fetch('/api/admin/clients', { headers: { Authorization: `Bearer ${token}` } });
+      const res = await offlineFetch('/api/admin/clients', { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
       if (Array.isArray(data)) setClients(data);
     } catch (err) {
@@ -61,7 +63,7 @@ export default function DirectSale() {
 
   const fetchProducts = async () => {
     try {
-      const res = await fetch('/api/admin/inventory', { headers: { Authorization: `Bearer ${token}` } });
+      const res = await offlineFetch('/api/admin/inventory', { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
       if (Array.isArray(data)) setProducts(data);
     } catch (err) {
@@ -126,32 +128,60 @@ export default function DirectSale() {
     if (cart.length === 0) return;
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/direct-sale', {
+      const saleBody = {
+        clientId: selectedClientId,
+        customerName: customerName.trim() || undefined,
+        paidAmount: Number(paidAmount) || 0,
+        discount: parseFloat(discount) || 0,
+        items: cart.map(item => ({
+          productId: item.id,
+          quantity: item.quantity,
+          unitPrice: item.customUnitPrice
+        }))
+      };
+
+      // Optimistic update: deduct stock locally
+      const optimisticUpdate = async () => {
+        for (const item of cart) {
+          await offlineProducts.updateLocal(item.id, {
+            stockQuantity: Math.max(0, item.stockQuantity - item.quantity)
+          });
+        }
+      };
+
+      const res = await offlineFetch('/api/admin/direct-sale', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          clientId: selectedClientId,
-          customerName: customerName.trim() || undefined,
-          paidAmount: Number(paidAmount) || 0,
-          discount: parseFloat(discount) || 0,
-          items: cart.map(item => ({
-            productId: item.id,
-            quantity: item.quantity,
-            unitPrice: item.customUnitPrice
-          }))
-        })
+        body: JSON.stringify(saleBody)
+      }, {
+        description: `بيع مباشر - ${cart.length} منتج`,
+        optimisticUpdate,
       });
+
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'حدث خطأ أثناء تأكيد الطلب');
+      if (!res.ok && !data.offline) throw new Error(data.error || 'حدث خطأ أثناء تأكيد الطلب');
       
+      // Update local products state to reflect stock changes
+      setProducts(prev => prev.map(p => {
+        const cartItem = cart.find(c => c.id === p.id);
+        if (cartItem) {
+          return { ...p, stockQuantity: Math.max(0, p.stockQuantity - cartItem.quantity) };
+        }
+        return p;
+      }));
+
       setSuccess(true);
       setCart([]);
       setCustomerName('');
       setSelectedClientId(null);
       setPaidAmount('');
       setDiscount('');
-      fetchProducts(); // Refresh stock
-      fetchClients(); // Refresh debt
+      
+      // Only refresh from server if online
+      if (navigator.onLine) {
+        fetchProducts();
+        fetchClients();
+      }
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: unknown) {
       alert((err as Error).message || 'حدث خطأ أثناء تأكيد الطلب');

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Settings as SettingsIcon, Save, Lock, Store, Check, Trash2, AlertTriangle } from 'lucide-react';
 import { useSettings } from '@/contexts/SettingsContext';
+import { offlineFetch } from '@/lib/offlineFetch';
 
 const CURRENCIES = [
   { label: 'شيكل (₪)', value: '₪', flag: '🇮🇱' },
@@ -39,7 +40,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    fetch('/api/admin/settings', { headers: { Authorization: `Bearer ${token}` } })
+    offlineFetch('/api/admin/settings', { headers: { Authorization: `Bearer ${token}` } })
       .then(res => res.ok ? res.json() : null)
       .then(data => {
         if (data && !data.error) {
@@ -64,7 +65,7 @@ export default function SettingsPage() {
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     const token = localStorage.getItem('token');
-    const res = await fetch('/api/admin/settings', {
+    const res = await offlineFetch('/api/admin/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(storeSettings),
@@ -93,7 +94,7 @@ export default function SettingsPage() {
     }
 
     const token = localStorage.getItem('token');
-    const res = await fetch('/api/auth/change-password', {
+    const res = await offlineFetch('/api/auth/change-password', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ currentPassword, newPassword }),
@@ -121,7 +122,7 @@ export default function SettingsPage() {
     setResetLoading(true);
     const token = localStorage.getItem('token');
     try {
-      const res = await fetch('/api/admin/reset-database', {
+      const res = await offlineFetch('/api/admin/reset-database', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       });

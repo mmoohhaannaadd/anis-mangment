@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Search, Eye, X, ShoppingCart, Pencil, Trash2 } from 'lucide-react';
 import { useCurrency } from '@/contexts/SettingsContext';
+import { offlineFetch } from '@/lib/offlineFetch';
 
 type OrderItem = {
   id: number;
@@ -50,7 +51,7 @@ export default function AdminOrders() {
   const fetchOrders = async () => {
     const token = localStorage.getItem('token');
     try {
-      const res = await fetch('/api/admin/orders', {
+      const res = await offlineFetch('/api/admin/orders', {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
@@ -82,7 +83,7 @@ export default function AdminOrders() {
     setPaymentError('');
 
     const token = localStorage.getItem('token');
-    await fetch(`/api/admin/orders/${selectedOrder.id}/status`, {
+    await offlineFetch(`/api/admin/orders/${selectedOrder.id}/status`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ status: newStatus, paidAmount: Number(paidAmount) })
@@ -95,7 +96,7 @@ export default function AdminOrders() {
   const saveOrderEdits = async () => {
     if (!detailOrder) return;
     const token = localStorage.getItem('token');
-    const res = await fetch(`/api/admin/orders/${detailOrder.id}/items`, {
+    const res = await offlineFetch(`/api/admin/orders/${detailOrder.id}/items`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ items: editingOrderItems })

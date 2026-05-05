@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Users, Search, Plus, X, Trash2, AlertTriangle, FileText } from 'lucide-react';
 import { useCurrency } from '@/contexts/SettingsContext';
+import { offlineFetch } from '@/lib/offlineFetch';
 
 type ClientRecord = {
   id: number;
@@ -53,7 +54,7 @@ export default function AdminClients() {
   const fetchClients = async () => {
     const token = localStorage.getItem('token');
     try {
-      const res = await fetch('/api/admin/clients', { headers: { Authorization: `Bearer ${token}` } });
+      const res = await offlineFetch('/api/admin/clients', { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) setClients(data);
@@ -72,7 +73,7 @@ export default function AdminClients() {
     setRequestLoading(true);
     const token = localStorage.getItem('token');
     try {
-      await fetch('/api/admin/transactions', {
+      await offlineFetch('/api/admin/transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ clientId: target.id, amount: Number(amount), notes, type })
@@ -96,7 +97,7 @@ export default function AdminClients() {
     setRequestLoading(true);
     const token = localStorage.getItem('token');
     try {
-      const res = await fetch('/api/admin/clients', {
+      const res = await offlineFetch('/api/admin/clients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(newClient),
@@ -121,7 +122,7 @@ export default function AdminClients() {
   const handleDeleteClient = async () => {
     if (!clientToDelete) return;
     const token = localStorage.getItem('token');
-    const res = await fetch(`/api/admin/clients/${clientToDelete.id}`, {
+    const res = await offlineFetch(`/api/admin/clients/${clientToDelete.id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` }
     });
@@ -141,7 +142,7 @@ export default function AdminClients() {
     setInvoiceLoading(true);
     const token = localStorage.getItem('token');
     try {
-      const res = await fetch(`/api/admin/clients/${client.id}/invoice`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await offlineFetch(`/api/admin/clients/${client.id}/invoice`, { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) {
         const data = await res.json();
         setInvoiceData(data);

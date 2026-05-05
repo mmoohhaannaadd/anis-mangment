@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { TrendingUp, Package, Users, ShoppingCart } from 'lucide-react';
 import { useCurrency } from '@/contexts/SettingsContext';
+import { offlineFetch } from '@/lib/offlineFetch';
 
 type AnalyticsData = {
   monthlyChart: { month: string; revenue: number; expenses: number; orders: number; profit: number }[];
@@ -26,7 +27,7 @@ export default function Analytics() {
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    fetch('/api/admin/analytics', { headers: { Authorization: `Bearer ${token}` } })
+    offlineFetch('/api/admin/analytics', { headers: { Authorization: `Bearer ${token}` } })
       .then(res => res.json())
       .then(d => { if (d && d.monthlyChart) setData(d); })
       .catch(() => {})

@@ -4,6 +4,7 @@ import { useCartStore } from '@/store/cartStore';
 import { cn } from '@/lib/utils';
 import { Store, ShoppingBag, ClipboardList, LogOut, Menu, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import OfflineIndicator from '@/components/OfflineIndicator';
 import { useState } from 'react';
 
 const clientNav = [
@@ -112,6 +113,7 @@ export default function ClientLayout() {
       )}
 
       {/* Main Content */}
+      <OfflineIndicator />
       <main className="flex-1 overflow-y-auto p-4 md:p-8 max-w-7xl mx-auto w-full">
         <Outlet />
       </main>

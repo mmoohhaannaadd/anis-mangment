@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useCurrency } from '@/contexts/SettingsContext';
+import { offlineFetch } from '@/lib/offlineFetch';
 import { useAppStore } from '@/store';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -41,7 +42,7 @@ export default function Suppliers() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const fetchSuppliers = () => {
-    fetch('/api/admin/suppliers', { headers: { Authorization: `Bearer ${token}` } })
+    offlineFetch('/api/admin/suppliers', { headers: { Authorization: `Bearer ${token}` } })
       .then(res => res.json())
       .then(data => { if (Array.isArray(data)) setSuppliers(data); })
       .catch(() => {})
@@ -54,7 +55,7 @@ export default function Suppliers() {
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    await fetch('/api/admin/suppliers', {
+    await offlineFetch('/api/admin/suppliers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(form),
@@ -67,7 +68,7 @@ export default function Suppliers() {
   const handleEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingSupplier) return;
-    await fetch(`/api/admin/suppliers/${editingSupplier.id}`, {
+    await offlineFetch(`/api/admin/suppliers/${editingSupplier.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(editForm),
@@ -78,7 +79,7 @@ export default function Suppliers() {
 
   const handleDelete = async (id: number) => {
     if (!confirm('هل أنت متأكد من حذف هذا المورد؟ سيتم فك ارتباط المنتجات به.')) return;
-    await fetch(`/api/admin/suppliers/${id}`, {
+    await offlineFetch(`/api/admin/suppliers/${id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     });

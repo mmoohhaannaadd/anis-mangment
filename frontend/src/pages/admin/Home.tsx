@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useCurrency } from '@/contexts/SettingsContext';
+import { offlineFetch } from '@/lib/offlineFetch';
 import { 
   Wallet, 
   PlusCircle, 
@@ -64,14 +65,14 @@ export default function AdminHome() {
     const token = localStorage.getItem('token');
     try {
       // Fetch Cash Balance
-      const cashRes = await fetch('/api/admin/cash', { headers: { Authorization: `Bearer ${token}` } });
+      const cashRes = await offlineFetch('/api/admin/cash', { headers: { Authorization: `Bearer ${token}` } });
       if (cashRes.ok) {
         const cashData = await cashRes.json();
         setBalance(cashData.balance);
       }
 
       // Fetch Pending Orders
-      const ordersRes = await fetch('/api/admin/orders', { headers: { Authorization: `Bearer ${token}` } });
+      const ordersRes = await offlineFetch('/api/admin/orders', { headers: { Authorization: `Bearer ${token}` } });
       if (ordersRes.ok) {
         const ordersData = await ordersRes.json();
         if (Array.isArray(ordersData)) {
@@ -96,7 +97,7 @@ export default function AdminHome() {
     setIsSubmittingExpense(true);
     const token = localStorage.getItem('token');
     try {
-      const res = await fetch('/api/admin/expenses', {
+      const res = await offlineFetch('/api/admin/expenses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ 
@@ -111,7 +112,7 @@ export default function AdminHome() {
         setExpenseDesc('');
         setExpenseCategory('');
         // Refresh balance
-        const cashRes = await fetch('/api/admin/cash', { headers: { Authorization: `Bearer ${token}` } });
+        const cashRes = await offlineFetch('/api/admin/cash', { headers: { Authorization: `Bearer ${token}` } });
         if (cashRes.ok) {
           const cashData = await cashRes.json();
           setBalance(cashData.balance);
@@ -142,7 +143,7 @@ export default function AdminHome() {
     }
     setPaymentError('');
     const token = localStorage.getItem('token');
-    await fetch(`/api/admin/orders/${selectedOrder.id}/status`, {
+    await offlineFetch(`/api/admin/orders/${selectedOrder.id}/status`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ status: newStatus, paidAmount: Number(paidAmount) })
@@ -155,7 +156,7 @@ export default function AdminHome() {
   const saveOrderEdits = async () => {
     if (!detailOrder) return;
     const token = localStorage.getItem('token');
-    const res = await fetch(`/api/admin/orders/${detailOrder.id}/items`, {
+    const res = await offlineFetch(`/api/admin/orders/${detailOrder.id}/items`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ items: editingOrderItems })

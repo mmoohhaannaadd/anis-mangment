@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useCurrency, useSettings } from '@/contexts/SettingsContext';
+import { offlineFetch } from '@/lib/offlineFetch';
 
 type CashLog = {
   id: number;
@@ -41,7 +42,7 @@ export default function AdminCash() {
   const fetchCashData = async () => {
     const token = localStorage.getItem('token');
     try {
-      const res = await fetch('/api/admin/cash', { headers: { Authorization: `Bearer ${token}` } });
+      const res = await offlineFetch('/api/admin/cash', { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) {
         const data = await res.json();
         setBalance(data.balance ?? 0);
@@ -60,7 +61,7 @@ export default function AdminCash() {
     e.preventDefault();
     if (!expenseAmount || !expenseDesc || !expenseCategory) return;
     const token = localStorage.getItem('token');
-    await fetch('/api/admin/expenses', {
+    await offlineFetch('/api/admin/expenses', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ amount: Number(expenseAmount), description: expenseDesc, category: expenseCategory })
@@ -73,7 +74,7 @@ export default function AdminCash() {
     e.preventDefault();
     if (!depositAmount || !depositDesc) return;
     const token = localStorage.getItem('token');
-    await fetch('/api/admin/cash/deposit', {
+    await offlineFetch('/api/admin/cash/deposit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ amount: Number(depositAmount), description: depositDesc })

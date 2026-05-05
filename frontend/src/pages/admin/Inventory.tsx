@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useCurrency, useSettings } from '@/contexts/SettingsContext';
+import { offlineFetch } from '@/lib/offlineFetch';
 import { useAppStore } from '@/store';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -56,7 +57,7 @@ export default function Inventory() {
   const [restockPaymentType, setRestockPaymentType] = useState<'cash' | 'debt' | 'initial'>('cash');
 
   const fetchProducts = () => {
-    fetch('/api/admin/inventory', { headers: { Authorization: `Bearer ${token}` } })
+    offlineFetch('/api/admin/inventory', { headers: { Authorization: `Bearer ${token}` } })
       .then(res => res.json())
       .then(data => { if (Array.isArray(data)) setProducts(data); })
       .catch(() => {})
@@ -67,7 +68,7 @@ export default function Inventory() {
     // eslint-disable-next-line
     fetchProducts();
     // Fetch suppliers for dropdown
-    fetch('/api/admin/suppliers', { headers: { Authorization: `Bearer ${token}` } })
+    offlineFetch('/api/admin/suppliers', { headers: { Authorization: `Bearer ${token}` } })
       .then(res => res.json())
       .then(data => { if (Array.isArray(data)) setSuppliersList(data); })
       .catch(() => {});
@@ -75,7 +76,7 @@ export default function Inventory() {
 
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    await fetch('/api/admin/inventory', {
+    await offlineFetch('/api/admin/inventory', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({
@@ -100,7 +101,7 @@ export default function Inventory() {
   const handleEditProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProduct) return;
-    await fetch(`/api/admin/inventory/${editingProduct.id}`, {
+    await offlineFetch(`/api/admin/inventory/${editingProduct.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({
@@ -121,7 +122,7 @@ export default function Inventory() {
 
   const handleDeleteProduct = async (id: number) => {
     if (!confirm('هل أنت متأكد من حذف هذا المنتج؟')) return;
-    await fetch(`/api/admin/inventory/${id}`, {
+    await offlineFetch(`/api/admin/inventory/${id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -130,7 +131,7 @@ export default function Inventory() {
 
   const handleRestock = async () => {
     if (!restockProduct || !restockQty) return;
-    await fetch(`/api/admin/inventory/${restockProduct.id}/restock`, {
+    await offlineFetch(`/api/admin/inventory/${restockProduct.id}/restock`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({

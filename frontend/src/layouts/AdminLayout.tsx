@@ -2,6 +2,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAppStore } from '@/store';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import OfflineIndicator from '@/components/OfflineIndicator';
 import {
   Home,
   LayoutDashboard,
@@ -108,6 +109,7 @@ export default function AdminLayout() {
 
       {/* Main Content */}
       <div className="flex flex-1 flex-col overflow-hidden">
+        <OfflineIndicator />
         <header className="flex h-16 items-center justify-between border-b bg-white px-4 shadow-sm lg:px-8">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarOpen(true)}>
