@@ -1,0 +1,20 @@
+{
+  "name": "إدارة حلويات الأنيس",
+  "short_name": "حلويات الأنيس",
+  "description": "نظام إدارة حلويات الأنيس - المخزون والمبيعات والعملاء",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f0e6da",
+  "theme_color": "#1d4ed8",
+  "dir": "rtl",
+  "lang": "ar",
+  "icons": [
+    {
+      "src": "/icon-512.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}
