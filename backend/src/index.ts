@@ -158,7 +158,8 @@ app.get('/api/admin/dashboard', authenticate, requireAdmin, asyncHandler(async (
   const allTx = await db.select().from(transactions);
   const totalOrdered = allTx.filter(t => t.type === 'order').reduce((a, c) => a + c.amount, 0);
   const totalPaid = allTx.filter(t => t.type === 'payment').reduce((a, c) => a + c.amount, 0);
-  const totalDebts = totalOrdered - totalPaid;
+  const totalAdjustments = allTx.filter(t => t.type === 'adjustment').reduce((a, c) => a + c.amount, 0);
+  const totalDebts = totalOrdered - totalPaid + totalAdjustments;
 
   // Recent activities (last 15)
   const recentCashLogs = await db.select().from(cashLog).orderBy(desc(cashLog.createdAt)).limit(10);
@@ -601,9 +602,10 @@ app.get('/api/admin/clients', authenticate, requireAdmin, asyncHandler(async (re
     const clientTx = allTx.filter(t => t.clientId === client.id);
     const totalOrdered = clientTx.filter(t => t.type === 'order').reduce((acc, current) => acc + current.amount, 0);
     const totalPaid = clientTx.filter(t => t.type === 'payment').reduce((acc, current) => acc + current.amount, 0);
+    const totalAdjustments = clientTx.filter(t => t.type === 'adjustment').reduce((acc, current) => acc + current.amount, 0);
     return {
       ...client,
-      totalDebt: totalOrdered - totalPaid,
+      totalDebt: totalOrdered - totalPaid + totalAdjustments,
       totalOrdered,
       totalPaid
     }
@@ -678,6 +680,8 @@ app.get('/api/admin/clients/:id/invoice', authenticate, requireAdmin, asyncHandl
       runningBalance += tx.amount;
     } else if (tx.type === 'payment') {
       runningBalance -= tx.amount;
+    } else if (tx.type === 'adjustment') {
+      runningBalance += tx.amount; // adjustment can be positive or negative
     }
     return { ...tx, runningBalance };
   });
@@ -687,6 +691,7 @@ app.get('/api/admin/clients/:id/invoice', authenticate, requireAdmin, asyncHandl
   
   const totalOrdered = clientTx.filter(t => t.type === 'order').reduce((acc, t) => acc + t.amount, 0);
   const totalPaid = clientTx.filter(t => t.type === 'payment').reduce((acc, t) => acc + t.amount, 0);
+  const totalAdjustments = clientTx.filter(t => t.type === 'adjustment').reduce((acc, t) => acc + t.amount, 0);
   
   res.json({
     client: { id: client.id, name: client.name, phone: client.phone },
@@ -694,8 +699,53 @@ app.get('/api/admin/clients/:id/invoice', authenticate, requireAdmin, asyncHandl
     summary: {
       totalOrdered,
       totalPaid,
-      currentDebt: totalOrdered - totalPaid,
+      currentDebt: totalOrdered - totalPaid + totalAdjustments,
     }
+  });
+}));
+
+// --- ADMIN: MANUAL DEBT ADJUSTMENT (no cash box impact) ---
+app.put('/api/admin/clients/:id/adjust-debt', authenticate, requireAdmin, asyncHandler(async (req, res) => {
+  const clientId = parseInt(req.params.id as string);
+  const { newDebt, reason } = req.body;
+  const desiredDebt = Number(newDebt);
+
+  if (isNaN(desiredDebt) || desiredDebt < 0) {
+    res.status(400).json({ error: 'مبلغ الدين الجديد غير صالح' });
+    return;
+  }
+
+  const client = await db.query.users.findFirst({ where: eq(users.id, clientId) });
+  if (!client) { res.status(404).json({ error: 'العميل غير موجود' }); return; }
+
+  // Calculate current debt from transactions
+  const clientTx = await db.select().from(transactions).where(eq(transactions.clientId, clientId));
+  const totalOrdered = clientTx.filter(t => t.type === 'order').reduce((acc, t) => acc + t.amount, 0);
+  const totalPaid = clientTx.filter(t => t.type === 'payment').reduce((acc, t) => acc + t.amount, 0);
+  const totalAdjustments = clientTx.filter(t => t.type === 'adjustment').reduce((acc, t) => acc + t.amount, 0);
+  const currentDebt = totalOrdered - totalPaid + totalAdjustments;
+
+  const difference = desiredDebt - currentDebt;
+
+  if (Math.abs(difference) < 0.01) {
+    res.json({ success: true, message: 'الدين لم يتغير', currentDebt });
+    return;
+  }
+
+  // Insert an adjustment transaction (positive = increase debt, negative = decrease debt)
+  // NO cash log entry — this is purely a book correction
+  await db.insert(transactions).values({
+    clientId,
+    type: 'adjustment',
+    amount: difference,
+    notes: `تعديل يدوي: ${reason || 'تصحيح الدين'} (من ${currentDebt.toFixed(2)} إلى ${desiredDebt.toFixed(2)})`,
+  });
+
+  res.json({
+    success: true,
+    previousDebt: currentDebt,
+    newDebt: desiredDebt,
+    adjustment: difference,
   });
 }));
 

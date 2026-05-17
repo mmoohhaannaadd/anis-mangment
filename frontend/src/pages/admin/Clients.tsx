@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Users, Search, Plus, X, Trash2, AlertTriangle, FileText } from 'lucide-react';
+import { Users, Search, Plus, X, Trash2, AlertTriangle, FileText, Edit3 } from 'lucide-react';
 import { useCurrency } from '@/contexts/SettingsContext';
 import { offlineFetch } from '@/lib/offlineFetch';
 
@@ -50,6 +50,11 @@ export default function AdminClients() {
   // Invoice
   const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
   const [invoiceLoading, setInvoiceLoading] = useState(false);
+
+  // Debt Adjustment
+  const [adjustDebtClient, setAdjustDebtClient] = useState<ClientRecord | null>(null);
+  const [adjustNewDebt, setAdjustNewDebt] = useState('');
+  const [adjustReason, setAdjustReason] = useState('');
 
   const fetchClients = async () => {
     const token = localStorage.getItem('token');
@@ -129,6 +134,33 @@ export default function AdminClients() {
     if (res.ok) {
       setClientToDelete(null);
       fetchClients();
+    }
+  };
+
+  const handleAdjustDebt = async () => {
+    if (!adjustDebtClient || adjustNewDebt === '') return;
+    setRequestLoading(true);
+    const token = localStorage.getItem('token');
+    try {
+      const res = await offlineFetch(`/api/admin/clients/${adjustDebtClient.id}/adjust-debt`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ newDebt: Number(adjustNewDebt), reason: adjustReason })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'حدث خطأ أثناء تعديل الدين');
+        return;
+      }
+      setAdjustDebtClient(null);
+      setAdjustNewDebt('');
+      setAdjustReason('');
+      fetchClients();
+    } catch (err) {
+      console.error(err);
+      alert('فشل الاتصال بالسيرفر');
+    } finally {
+      setRequestLoading(false);
     }
   };
 
@@ -229,7 +261,7 @@ export default function AdminClients() {
                 <span className="text-sm">{client.totalDebt > 0 ? 'المتبقي عليه (الذمة)' : 'الرصيد الحالي'}</span>
                 <strong className="text-xl">{client.totalDebt} {currency}</strong>
               </div>
-              <div className="grid grid-cols-3 gap-2 mt-2">
+              <div className="grid grid-cols-2 gap-2 mt-2">
                 <Button 
                   variant="outline" 
                   size="sm"
@@ -245,6 +277,15 @@ export default function AdminClients() {
                   onClick={() => setSelectedDebtClient(client)}
                 >
                   إضافة دين سابق
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="border-amber-200 text-amber-700 hover:bg-amber-50"
+                  onClick={() => { setAdjustDebtClient(client); setAdjustNewDebt(String(client.totalDebt)); }}
+                >
+                  <Edit3 className="h-3.5 w-3.5 ml-1" />
+                  تعديل الدين
                 </Button>
                 <Button 
                   variant="outline" 
@@ -384,6 +425,77 @@ export default function AdminClients() {
         </div>
       )}
 
+      {/* Adjust Debt Modal */}
+      {adjustDebtClient && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <Card className="w-full max-w-md shadow-xl border-amber-200 animate-in fade-in zoom-in-95">
+            <CardHeader className="flex flex-row items-center justify-between bg-gradient-to-l from-amber-50 to-yellow-50 rounded-t-xl border-b border-amber-100">
+              <CardTitle className="flex items-center gap-2 text-amber-900">
+                <Edit3 className="h-5 w-5" />
+                تعديل دين العميل: {adjustDebtClient.name}
+              </CardTitle>
+              <Button variant="ghost" size="icon" className="text-amber-600 hover:bg-amber-100" onClick={() => { setAdjustDebtClient(null); setAdjustNewDebt(''); setAdjustReason(''); }}>
+                <X className="h-4 w-4" />
+              </Button>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-4">
+              <div className="p-3 bg-red-50 rounded-lg text-red-900 border border-red-100 flex justify-between items-center">
+                <span className="text-sm">الدين الحالي:</span>
+                <strong className="text-lg">{adjustDebtClient.totalDebt.toFixed(2)} {currency}</strong>
+              </div>
+              <div className="p-3 bg-amber-50 rounded-lg border border-amber-100 text-amber-800 text-sm leading-relaxed">
+                <AlertTriangle className="h-4 w-4 inline ml-1" />
+                هذا التعديل يدوي ولن يؤثر على الصندوق (الكاش). استخدمه فقط لتصحيح أخطاء الإدخال.
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">الدين الجديد ({currency})</label>
+                <Input
+                  inputMode="decimal"
+                  value={adjustNewDebt}
+                  autoFocus
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (val === '' || /^\d*\.?\d*$/.test(val)) setAdjustNewDebt(val);
+                  }}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">سبب التعديل (اختياري)</label>
+                <Input
+                  type="text"
+                  value={adjustReason}
+                  onChange={e => setAdjustReason(e.target.value)}
+                  placeholder="مثال: تصحيح خطأ إدخال"
+                />
+              </div>
+              {adjustNewDebt !== '' && Number(adjustNewDebt) !== adjustDebtClient.totalDebt && (
+                <div className={`p-3 rounded-lg border text-sm ${
+                  Number(adjustNewDebt) < adjustDebtClient.totalDebt
+                    ? 'bg-green-50 border-green-200 text-green-800'
+                    : 'bg-red-50 border-red-200 text-red-800'
+                }`}>
+                  {Number(adjustNewDebt) < adjustDebtClient.totalDebt
+                    ? `سيتم تقليل الدين بمقدار ${(adjustDebtClient.totalDebt - Number(adjustNewDebt)).toFixed(2)} ${currency}`
+                    : `سيتم زيادة الدين بمقدار ${(Number(adjustNewDebt) - adjustDebtClient.totalDebt).toFixed(2)} ${currency}`
+                  }
+                </div>
+              )}
+              <div className="flex justify-end gap-2 pt-4">
+                <Button variant="outline" onClick={() => { setAdjustDebtClient(null); setAdjustNewDebt(''); setAdjustReason(''); }}>إلغاء</Button>
+                <Button
+                  className="bg-amber-600 hover:bg-amber-700 text-white"
+                  disabled={requestLoading || adjustNewDebt === '' || Number(adjustNewDebt) === adjustDebtClient.totalDebt}
+                  onClick={handleAdjustDebt}
+                >
+                  {requestLoading ? 'جاري التعديل...' : 'تأكيد التعديل'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Invoice Modal */}
       {invoiceData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -434,17 +546,19 @@ export default function AdminClients() {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {invoiceData.transactions.map((tx) => (
-                        <tr key={tx.id} className={`${tx.type === 'payment' ? 'bg-emerald-50/50' : 'bg-red-50/50'} hover:bg-slate-50 transition-colors`}>
+                        <tr key={tx.id} className={`${tx.type === 'payment' ? 'bg-emerald-50/50' : tx.type === 'adjustment' ? 'bg-amber-50/50' : 'bg-red-50/50'} hover:bg-slate-50 transition-colors`}>
                           <td className="py-2.5 px-3 text-slate-600 whitespace-nowrap text-xs">{formatDate(tx.createdAt)}</td>
                           <td className="py-2.5 px-3">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                              tx.type === 'payment' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                              tx.type === 'payment' ? 'bg-emerald-100 text-emerald-800' : tx.type === 'adjustment' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'
                             }`}>
-                              {tx.type === 'payment' ? 'دفعة' : 'دين'}
+                              {tx.type === 'payment' ? 'دفعة' : tx.type === 'adjustment' ? 'تعديل يدوي' : 'دين'}
                             </span>
                           </td>
-                          <td className={`py-2.5 px-3 font-semibold ${tx.type === 'payment' ? 'text-emerald-700' : 'text-red-700'}`}>
-                            {tx.type === 'payment' ? '-' : '+'}{tx.amount.toFixed(2)} {currency}
+                          <td className={`py-2.5 px-3 font-semibold ${
+                            tx.type === 'payment' ? 'text-emerald-700' : tx.type === 'adjustment' ? 'text-amber-700' : 'text-red-700'
+                          }`}>
+                            {tx.type === 'payment' ? '-' : tx.type === 'adjustment' ? (tx.amount >= 0 ? '+' : '') : '+'}{tx.amount.toFixed(2)} {currency}
                           </td>
                           <td className={`py-2.5 px-3 font-medium ${tx.runningBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
                             {tx.runningBalance.toFixed(2)} {currency}
