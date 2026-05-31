@@ -92,9 +92,11 @@ app.get('/api/admin/dashboard', authenticate, requireAdmin, asyncHandler(async (
 
   const allClients = await db.query.users.findMany({ where: eq(users.role, 'client') });
   
-  // 1. Total Cash: Tray balance (Sum In - Sum Out) - Keep as overall balance
+  // 1. Total Cash: Tray balance (Sum In - Sum Out) - Exclude supplier_debt from cash
   const allIn = await db.select({ total: sql<number>`COALESCE(SUM(amount), 0)` }).from(cashLog).where(eq(cashLog.type, 'in'));
-  const allOut = await db.select({ total: sql<number>`COALESCE(SUM(amount), 0)` }).from(cashLog).where(eq(cashLog.type, 'out'));
+  const allOut = await db.select({ total: sql<number>`COALESCE(SUM(amount), 0)` }).from(cashLog).where(
+    and(eq(cashLog.type, 'out'), sql`${cashLog.referenceType} != 'supplier_debt'`)
+  );
   const totalCash = (Number(allIn[0]?.total) || 0) - (Number(allOut[0]?.total) || 0);
 
   // 2. Real Revenue (Total Sales) & COGS - Filtered by date
@@ -209,21 +211,30 @@ app.get('/api/admin/dashboard', authenticate, requireAdmin, asyncHandler(async (
 app.get('/api/admin/suppliers', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const allSuppliers = await db.select().from(suppliers).orderBy(desc(suppliers.id));
   
-  // Enrich each supplier with total purchased amount and product list
+  // Enrich each supplier with total purchased amount, debt, and product list
   const allProducts = await db.select().from(products);
   const allCashLogs = await db.select().from(cashLog);
   
   const suppliersWithDetails = allSuppliers.map(s => {
     const supplierProducts = allProducts.filter(p => p.supplierId === s.id);
-    // Sum all inventory_purchase cash-out logs for these products
+    // Sum all inventory_purchase cash-out logs where referenceId = this supplier's ID
     const totalPurchased = allCashLogs
-      .filter(log => log.type === 'out' && log.referenceType === 'inventory_purchase' && supplierProducts.some(p => p.id === log.referenceId))
+      .filter(log => log.type === 'out' && log.referenceType === 'inventory_purchase' && log.referenceId === s.id)
+      .reduce((sum, log) => sum + log.amount, 0);
+    // Sum all supplier_debt logs where referenceId = this supplier's ID
+    const totalDebt = allCashLogs
+      .filter(log => log.type === 'out' && log.referenceType === 'supplier_debt' && log.referenceId === s.id)
+      .reduce((sum, log) => sum + log.amount, 0);
+    // Sum all supplier_debt_payment logs for this supplier
+    const totalDebtPayments = allCashLogs
+      .filter(log => log.type === 'out' && log.referenceType === 'supplier_debt_payment' && log.referenceId === s.id)
       .reduce((sum, log) => sum + log.amount, 0);
     
     return {
       ...s,
       products: supplierProducts.map(p => ({ id: p.id, name: p.name })),
       totalPurchased,
+      totalDebt: totalDebt - totalDebtPayments,
     };
   });
   
@@ -284,15 +295,16 @@ app.post('/api/admin/inventory', authenticate, requireAdmin, asyncHandler(async 
   
   // Cost is per carton if purchaseUnit=carton, else per piece
   const totalCost = Number(costPrice) * initialBoxCount;
+  const resolvedSupplierId = supplierId ? Number(supplierId) : null;
   if (totalCost > 0 && effectivePayment !== 'initial') {
     const unitLabel = parsedPurchaseUnit === 'carton' ? `كرتونة (${numPiecesPerBox} قطعة/كرتونة)` : unit;
     if (effectivePayment === 'cash') {
-      // Deduct from cash box immediately
+      // Deduct from cash box immediately — referenceId = supplierId for tracking
       await db.insert(cashLog).values({
         type: 'out',
         amount: totalCost,
         referenceType: 'inventory_purchase',
-        referenceId: newProduct[0].id,
+        referenceId: resolvedSupplierId || 0,
         notes: `شراء مخزون (نقداً): ${initialBoxCount} ${unitLabel} من ${name} = ${initialPieces} قطعة`,
       });
     } else if (effectivePayment === 'debt') {
@@ -301,7 +313,7 @@ app.post('/api/admin/inventory', authenticate, requireAdmin, asyncHandler(async 
         type: 'out',
         amount: totalCost,
         referenceType: 'supplier_debt',
-        referenceId: newProduct[0].id,
+        referenceId: resolvedSupplierId || 0,
         notes: `دين للمورد (مخزون): ${initialBoxCount} ${unitLabel} من ${name} = ${initialPieces} قطعة`,
       });
     }
@@ -353,7 +365,7 @@ app.delete('/api/admin/inventory/:id', authenticate, requireAdmin, asyncHandler(
 // quantity = number of cartons (if purchaseUnit='carton') or pieces
 app.post('/api/admin/inventory/:id/restock', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const productId = parseInt(req.params.id as string);
-  const { quantity, isInitialStock, paymentType } = req.body; // quantity entered by admin (in cartons or pieces)
+  const { quantity, isInitialStock, paymentType, supplierId } = req.body; // quantity entered by admin (in cartons or pieces)
   const numQty = Number(quantity);
   if (isNaN(numQty) || numQty <= 0) { res.status(400).json({ error: 'كمية غير صالحة' }); return; }
 
@@ -367,23 +379,26 @@ app.post('/api/admin/inventory/:id/restock', authenticate, requireAdmin, asyncHa
   const piecesToAdd = isCarton ? numQty * piecesPerBox : numQty;
   const newQty = existing.stockQuantity + piecesToAdd;
 
+  // Update stock quantity only — don't change the product's default supplier
   await db.update(products).set({ stockQuantity: newQty }).where(eq(products.id, productId));
 
   // Cost is per carton (or per piece)
   const totalCost = existing.costPrice * numQty;
   const unitLabel = isCarton ? `كرتونة (${piecesPerBox} قطعة)` : existing.unit;
+  // Resolve which supplier this restock is from
+  const resolvedSupplierId = supplierId ? Number(supplierId) : (existing.supplierId || 0);
   
   // Determine effective payment type (paymentType overrides legacy isInitialStock)
   const effectivePayment = paymentType || (isInitialStock ? 'initial' : 'cash');
   
   if (effectivePayment !== 'initial') {
     if (effectivePayment === 'cash') {
-      // Deduct from cash box immediately
+      // Deduct from cash box immediately — referenceId = supplierId for tracking
       await db.insert(cashLog).values({
         type: 'out',
         amount: totalCost,
         referenceType: 'inventory_purchase',
-        referenceId: productId,
+        referenceId: resolvedSupplierId,
         notes: `إضافة مخزون (نقداً): ${numQty} ${unitLabel} من ${existing.name} = ${piecesToAdd} قطعة`,
       });
     } else if (effectivePayment === 'debt') {
@@ -392,7 +407,7 @@ app.post('/api/admin/inventory/:id/restock', authenticate, requireAdmin, asyncHa
         type: 'out',
         amount: totalCost,
         referenceType: 'supplier_debt',
-        referenceId: productId,
+        referenceId: resolvedSupplierId,
         notes: `دين للمورد (تعبئة مخزون): ${numQty} ${unitLabel} من ${existing.name} = ${piecesToAdd} قطعة`,
       });
     }
@@ -779,6 +794,8 @@ app.get('/api/admin/cash', authenticate, requireAdmin, asyncHandler(async (req, 
   const logs = await db.select().from(cashLog).orderBy(desc(cashLog.createdAt));
   let balance = 0;
   logs.forEach(l => {
+    // Exclude supplier_debt from cash balance — debts don't affect cash
+    if (l.referenceType === 'supplier_debt') return;
     if (l.type === 'in') balance += l.amount;
     else balance -= l.amount;
   });
@@ -803,6 +820,50 @@ app.post('/api/admin/expenses', authenticate, requireAdmin, asyncHandler(async (
   });
 
   res.json(expense[0]);
+}));
+
+// Cancel/reverse an expense — return cash
+app.delete('/api/admin/expenses/:id', authenticate, requireAdmin, asyncHandler(async (req, res) => {
+  const expenseId = parseInt(req.params.id as string);
+  
+  const expense = await db.query.expenses.findFirst({ where: eq(expenses.id, expenseId) });
+  if (!expense) { res.status(404).json({ error: 'المصروف غير موجود' }); return; }
+  
+  // Delete the associated cash log entry
+  await db.delete(cashLog).where(
+    and(
+      eq(cashLog.referenceType, 'expense'),
+      eq(cashLog.referenceId, expenseId)
+    )
+  );
+  
+  // Delete the expense itself
+  await db.delete(expenses).where(eq(expenses.id, expenseId));
+  
+  res.json({ success: true, message: 'تم إلغاء المصروف وإرجاع المبلغ للصندوق', amount: expense.amount });
+}));
+
+// Pay supplier debt — deduct from cash and reduce supplier debt
+app.post('/api/admin/suppliers/:id/pay-debt', authenticate, requireAdmin, asyncHandler(async (req, res) => {
+  const supplierId = parseInt(req.params.id as string);
+  const { amount } = req.body;
+  const numAmount = Number(amount);
+  
+  if (isNaN(numAmount) || numAmount <= 0) { res.status(400).json({ error: 'مبلغ غير صالح' }); return; }
+  
+  const supplier = await db.query.suppliers.findFirst({ where: eq(suppliers.id, supplierId) });
+  if (!supplier) { res.status(404).json({ error: 'المورد غير موجود' }); return; }
+  
+  // Record as cash out (this time it DOES affect cash)
+  await db.insert(cashLog).values({
+    type: 'out',
+    amount: numAmount,
+    referenceType: 'supplier_debt_payment',
+    referenceId: supplierId,
+    notes: `تسديد دين للمورد: ${supplier.name}`,
+  });
+  
+  res.json({ success: true, message: `تم تسديد ${numAmount} للمورد ${supplier.name}` });
 }));
 
 app.post('/api/admin/cash/deposit', authenticate, requireAdmin, asyncHandler(async (req, res) => {

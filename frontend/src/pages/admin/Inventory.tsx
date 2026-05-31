@@ -55,6 +55,7 @@ export default function Inventory() {
   const [restockProduct, setRestockProduct] = useState<Product | null>(null);
   const [restockQty, setRestockQty] = useState('');
   const [restockPaymentType, setRestockPaymentType] = useState<'cash' | 'debt' | 'initial'>('cash');
+  const [restockSupplierId, setRestockSupplierId] = useState<string>('');
 
   const fetchProducts = () => {
     offlineFetch('/api/admin/inventory', { headers: { Authorization: `Bearer ${token}` } })
@@ -138,11 +139,13 @@ export default function Inventory() {
         quantity: Number(restockQty),
         isInitialStock: restockPaymentType === 'initial',
         paymentType: restockPaymentType,
+        supplierId: restockSupplierId ? Number(restockSupplierId) : null,
       }),
     });
     setRestockProduct(null);
     setRestockQty('');
     setRestockPaymentType('cash');
+    setRestockSupplierId('');
     fetchProducts();
   };
 
@@ -315,7 +318,7 @@ export default function Inventory() {
                       variant="outline"
                       size="sm"
                       className="flex-1 gap-1 text-blue-600 border-blue-200 hover:bg-blue-50"
-                      onClick={() => { setRestockProduct(p); setRestockQty(''); }}
+                      onClick={() => { setRestockProduct(p); setRestockQty(''); setRestockSupplierId(p.supplierId ? String(p.supplierId) : ''); }}
                     >
                       <PackagePlus className="h-3.5 w-3.5" />
                       {p.purchaseUnit === 'carton' ? 'تعبئة (كرتون)' : 'تعبئة'}
@@ -725,6 +728,25 @@ export default function Inventory() {
                   }}
                   placeholder={restockProduct.purchaseUnit === 'carton' ? 'العدد...' : 'الكمية...'}
                 />
+              </div>
+
+              {/* Supplier Selection for Restock */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium flex items-center gap-1">
+                  <Truck className="h-3.5 w-3.5" />
+                  المورد (من أي مورد تشتري؟)
+                </label>
+                <select
+                  className="w-full border rounded-md px-3 py-2 text-sm"
+                  value={restockSupplierId}
+                  onChange={e => setRestockSupplierId(e.target.value)}
+                >
+                  <option value="">بدون مورد</option>
+                  {suppliersList.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-500">اختر المورد الذي تشتري منه هذه الكمية</p>
               </div>
 
               {(() => {

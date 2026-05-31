@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useCurrency, useSettings } from '@/contexts/SettingsContext';
 import { offlineFetch } from '@/lib/offlineFetch';
+import { Undo2 } from 'lucide-react';
 
 type CashLog = {
   id: number;
@@ -67,6 +68,16 @@ export default function AdminCash() {
       body: JSON.stringify({ amount: Number(expenseAmount), description: expenseDesc, category: expenseCategory })
     });
     setExpenseAmount(''); setExpenseDesc(''); setExpenseCategory('');
+    fetchCashData();
+  };
+
+  const handleCancelExpense = async (expenseId: number, description: string) => {
+    if (!confirm(`هل أنت متأكد من إلغاء هذا المصروف؟\n"${description}"\n\nسيتم إرجاع المبلغ للصندوق.`)) return;
+    const token = localStorage.getItem('token');
+    await offlineFetch(`/api/admin/expenses/${expenseId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
     fetchCashData();
   };
 
@@ -174,9 +185,18 @@ export default function AdminCash() {
                   <div>
                     <p className="font-semibold text-sm">{log.notes || 'حركة مالية'}</p>
                     <p className="text-xs text-slate-500">{new Date(log.createdAt).toLocaleString('ar-EG')}</p>
+                    {log.referenceType === 'supplier_debt' && (
+                      <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">
+                        دين مورد (لا يأثر على الصندوق)
+                      </span>
+                    )}
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-sm font-bold ${log.type === 'in' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                    {log.type === 'in' ? '+' : '-'}{log.amount} {currency}
+                  <span className={`px-3 py-1 rounded-full text-sm font-bold ${
+                    log.referenceType === 'supplier_debt' 
+                      ? 'bg-orange-100 text-orange-600'
+                      : log.type === 'in' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                  }`}>
+                    {log.referenceType === 'supplier_debt' ? '📋' : log.type === 'in' ? '+' : '-'}{log.amount} {currency}
                   </span>
                 </div>
               ))}
@@ -192,14 +212,25 @@ export default function AdminCash() {
           <CardContent>
             <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2">
               {expenses.map(exp => (
-                <div key={exp.id} className="flex justify-between items-center p-3 border rounded-lg bg-white">
+                <div key={exp.id} className="flex justify-between items-center p-3 border rounded-lg bg-white group">
                   <div>
                     <p className="font-semibold text-sm">{exp.description}</p>
                     <p className="text-xs text-slate-500">{exp.category} - {new Date(exp.createdAt).toLocaleString('ar-EG')}</p>
                   </div>
-                  <span className="px-3 py-1 rounded-full text-sm font-bold bg-slate-100 text-slate-700">
-                    {exp.amount} {currency}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 rounded-full text-sm font-bold bg-slate-100 text-slate-700">
+                      {exp.amount} {currency}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50 opacity-60 group-hover:opacity-100 transition-opacity"
+                      onClick={() => handleCancelExpense(exp.id, exp.description)}
+                      title="إلغاء المصروف وإرجاع المبلغ"
+                    >
+                      <Undo2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               ))}
               {expenses.length === 0 && <p className="text-sm text-slate-500 text-center py-4">لا يوجد مصروفات.</p>}

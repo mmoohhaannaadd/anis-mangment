@@ -5,7 +5,7 @@ import { useAppStore } from '@/store';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Truck, Plus, Pencil, Trash2, X, Package, Search, Phone, FileText } from 'lucide-react';
+import { Truck, Plus, Pencil, Trash2, X, Package, Search, Phone, FileText, CreditCard, Banknote } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface SupplierProduct {
@@ -20,6 +20,7 @@ interface Supplier {
   notes: string | null;
   products: SupplierProduct[];
   totalPurchased: number;
+  totalDebt: number;
   createdAt: string;
 }
 
@@ -37,6 +38,10 @@ export default function Suppliers() {
   // Edit form
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [editForm, setEditForm] = useState({ name: '', phone: '', notes: '' });
+
+  // Pay debt form
+  const [payingDebtSupplier, setPayingDebtSupplier] = useState<Supplier | null>(null);
+  const [payDebtAmount, setPayDebtAmount] = useState('');
 
   // Expanded supplier detail
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -86,40 +91,83 @@ export default function Suppliers() {
     fetchSuppliers();
   };
 
+  const handlePayDebt = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!payingDebtSupplier || !payDebtAmount) return;
+    await offlineFetch(`/api/admin/suppliers/${payingDebtSupplier.id}/pay-debt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ amount: Number(payDebtAmount) }),
+    });
+    setPayingDebtSupplier(null);
+    setPayDebtAmount('');
+    fetchSuppliers();
+  };
+
   const filteredSuppliers = suppliers.filter(s =>
     s.name.includes(search) || (s.phone && s.phone.includes(search))
   );
 
   const totalAllPurchases = suppliers.reduce((sum, s) => sum + s.totalPurchased, 0);
+  const totalAllDebts = suppliers.reduce((sum, s) => sum + (s.totalDebt || 0), 0);
 
   return (
     <div className="space-y-6">
-      {/* Summary Card */}
+      {/* Summary Cards */}
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-        <Card className="relative overflow-hidden border-none shadow-lg bg-gradient-to-br from-teal-600 via-emerald-600 to-green-700 text-white">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.15),transparent_60%)]" />
-          <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full -translate-x-10 translate-y-10" />
-          <CardContent className="relative pt-6 pb-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-white/70 mb-1 flex items-center gap-2">
-                  <Truck className="h-4 w-4" />
-                  إجمالي المشتريات من الموردين
-                </p>
-                <p className="text-3xl sm:text-4xl font-black tracking-tight">
-                  {totalAllPurchases.toFixed(2)}
-                  <span className="text-lg font-normal text-white/70 mr-2">{currency}</span>
-                </p>
-                <p className="text-xs text-white/50 mt-2">
-                  {suppliers.length} مورد مسجل · {suppliers.reduce((s, sup) => s + sup.products.length, 0)} منتج مرتبط
-                </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Card className="relative overflow-hidden border-none shadow-lg bg-gradient-to-br from-teal-600 via-emerald-600 to-green-700 text-white">
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.15),transparent_60%)]" />
+            <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full -translate-x-10 translate-y-10" />
+            <CardContent className="relative pt-6 pb-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-white/70 mb-1 flex items-center gap-2">
+                    <Banknote className="h-4 w-4" />
+                    إجمالي المشتريات نقداً
+                  </p>
+                  <p className="text-3xl sm:text-4xl font-black tracking-tight">
+                    {totalAllPurchases.toFixed(2)}
+                    <span className="text-lg font-normal text-white/70 mr-2">{currency}</span>
+                  </p>
+                  <p className="text-xs text-white/50 mt-2">
+                    {suppliers.length} مورد مسجل · {suppliers.reduce((s, sup) => s + sup.products.length, 0)} منتج مرتبط
+                  </p>
+                </div>
+                <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl">
+                  <Truck className="h-10 w-10 text-white/80" />
+                </div>
               </div>
-              <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl">
-                <Truck className="h-10 w-10 text-white/80" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+
+          {totalAllDebts > 0 && (
+            <Card className="relative overflow-hidden border-none shadow-lg bg-gradient-to-br from-orange-500 via-red-500 to-rose-600 text-white">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.15),transparent_60%)]" />
+              <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full -translate-x-10 translate-y-10" />
+              <CardContent className="relative pt-6 pb-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-white/70 mb-1 flex items-center gap-2">
+                      <CreditCard className="h-4 w-4" />
+                      إجمالي الديون على الموردين
+                    </p>
+                    <p className="text-3xl sm:text-4xl font-black tracking-tight">
+                      {totalAllDebts.toFixed(2)}
+                      <span className="text-lg font-normal text-white/70 mr-2">{currency}</span>
+                    </p>
+                    <p className="text-xs text-white/50 mt-2">
+                      مبالغ مستحقة لم تُدفع بعد
+                    </p>
+                  </div>
+                  <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl">
+                    <CreditCard className="h-10 w-10 text-white/80" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       </motion.div>
 
       {/* Header */}
@@ -158,7 +206,12 @@ export default function Suppliers() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filteredSuppliers.map((s, i) => (
             <motion.div key={s.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.03 }}>
-              <Card className="relative group hover:shadow-md transition-shadow">
+              <Card className={`relative group hover:shadow-md transition-shadow ${s.totalDebt > 0 ? 'border-orange-200' : ''}`}>
+                {s.totalDebt > 0 && (
+                  <div className="absolute top-2 left-2 bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">
+                    عليه دين
+                  </div>
+                )}
                 <CardHeader className="pb-2">
                   <CardTitle className="text-lg flex justify-between items-start">
                     <div className="flex items-center gap-2">
@@ -178,11 +231,19 @@ export default function Suppliers() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3 mt-1">
-                    {/* Total purchased */}
+                    {/* Total purchased (cash) */}
                     <div className="flex justify-between items-center text-sm">
-                      <span className="text-slate-500">إجمالي المشتريات</span>
+                      <span className="text-slate-500">مشتريات نقدية</span>
                       <span className={`font-bold text-lg ${s.totalPurchased > 0 ? 'text-teal-700' : 'text-slate-400'}`}>
                         {s.totalPurchased.toFixed(2)} {currency}
+                      </span>
+                    </div>
+
+                    {/* Total debt */}
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-slate-500">الدين المتبقي</span>
+                      <span className={`font-bold text-lg ${s.totalDebt > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                        {s.totalDebt > 0 ? s.totalDebt.toFixed(2) : '0.00'} {currency}
                       </span>
                     </div>
 
@@ -232,6 +293,16 @@ export default function Suppliers() {
 
                   {/* Actions */}
                   <div className="flex gap-2 mt-4 pt-3 border-t">
+                    {s.totalDebt > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 gap-1 text-orange-600 border-orange-200 hover:bg-orange-50"
+                        onClick={() => { setPayingDebtSupplier(s); setPayDebtAmount(''); }}
+                      >
+                        <CreditCard className="h-3.5 w-3.5" /> تسديد دين
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
@@ -325,6 +396,64 @@ export default function Suppliers() {
                 <div className="flex justify-end gap-2 pt-2">
                   <Button type="button" variant="outline" onClick={() => setEditingSupplier(null)}>إلغاء</Button>
                   <Button type="submit" className="bg-teal-600 hover:bg-teal-700 text-white">حفظ التعديلات</Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Pay Debt Modal */}
+      {payingDebtSupplier && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <Card className="w-full max-w-sm shadow-xl animate-in fade-in zoom-in-95">
+            <CardHeader className="flex flex-row items-center justify-between border-b pb-3">
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5 text-orange-600" />
+                تسديد دين: {payingDebtSupplier.name}
+              </CardTitle>
+              <Button variant="ghost" size="icon" onClick={() => setPayingDebtSupplier(null)}><X className="h-4 w-4" /></Button>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <form onSubmit={handlePayDebt} className="space-y-4">
+                <div className="p-3 bg-orange-50 rounded-lg border border-orange-200 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">الدين المتبقي:</span>
+                    <strong className="text-orange-700">{payingDebtSupplier.totalDebt.toFixed(2)} {currency}</strong>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">المبلغ المراد تسديده</label>
+                  <Input
+                    inputMode="decimal"
+                    required
+                    value={payDebtAmount}
+                    onChange={e => {
+                      const val = e.target.value;
+                      if (val === '' || /^\d*\.?\d*$/.test(val)) setPayDebtAmount(val);
+                    }}
+                    placeholder="أدخل المبلغ..."
+                  />
+                  {payDebtAmount && Number(payDebtAmount) > 0 && (
+                    <p className="text-xs text-slate-500">
+                      💰 سيتم خصم <strong className="text-red-600">{Number(payDebtAmount).toFixed(2)} {currency}</strong> من الصندوق
+                    </p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => setPayDebtAmount(String(payingDebtSupplier.totalDebt))}
+                  >
+                    تسديد كامل الدين
+                  </Button>
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button type="button" variant="outline" onClick={() => setPayingDebtSupplier(null)}>إلغاء</Button>
+                  <Button type="submit" className="bg-orange-600 hover:bg-orange-700 text-white">تأكيد التسديد</Button>
                 </div>
               </form>
             </CardContent>
